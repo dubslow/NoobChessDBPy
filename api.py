@@ -10,17 +10,14 @@ _CDBURL = 'http://www.chessdb.cn/cdb.php'
 class CDBStatus(StrEnum):
     '''Enum used for non-moves return values from CDB.
     
+    Ok = query served
     Success = request for analysis accepted
-    
-    GameOver includes checkmate,
-    stalemate, threefold, 50 move, etc
-    
+    GameOver includes checkmate, stalemate, threefold, 50 move, etc
     UnknownBoard = position not in DB (but maybe now added)
-    
     NoBestMove = position exists, but nevertheless no moves
-    
     TrivialBoard = request for analysis was ignored because trivial position
     '''
+    Ok           = auto()
     Success      = auto()
     GameOver     = auto()
     UnknownBoard = auto()
@@ -32,17 +29,15 @@ class CDBStatus(StrEnum):
 #    return {k: v for k, v in kwargs.items() if v is not None}
 
 
-def _parse_errors(text, board:chess.Board) -> CDBStatus | None:
-    match text:
-        case str() as t if 'nvalid' in t: # Fugly
-            raise ValueError(f'invalid board: {board.fen()}')
-        case "unknown":
-            return CDBStatus.UnknownBoard
-        case "nobestmove":
-            return CDBStatus.NoBestMove
-        case "":
-            return CDBStatus.TrivialBoard
-    return None
+def _parse_status(text, board:chess.Board) -> CDBStatus:
+    if text == "invalid board":
+        raise ValueError(f'invalid board: {board.fen()}')
+    return {"ok":         CDBStatus.Ok,
+            # How to test the following?
+            "unknown":    CDBStatus.UnknownBoard,
+            "nobestmove": CDBStatus.NoBestMove,
+            "":           CDBStatus.TrivialBoard
+           }[text]
 
 
 class AsyncCDBClient(httpx.AsyncClient):
@@ -52,7 +47,6 @@ class AsyncCDBClient(httpx.AsyncClient):
     the following standard options:
     
     showall, learn, egtbmetric, endgame
-    
     '''
 
     # TODO: http2?
@@ -85,7 +79,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
         json = resp.json()
         pprint(json)
-        if (err := _parse_errors(json['status'], board)) is not None:
+        if (err := _parse_status(json['status'], board)) is not None:
             return err
         return json
        
