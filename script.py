@@ -14,7 +14,8 @@ logging.basicConfig(
 async def process_query_all(client, arg):
     #print(f"making Board for {arg}")
     board = chess.Board(arg)
-    text = await client.query_all_known_moves(board)
+    #text = await client.query_all_known_moves(board)
+    text = await client.request_analysis(board)
     print(f'for board:\n{board.unicode()}\ngot moves:\n{text}')
 
 

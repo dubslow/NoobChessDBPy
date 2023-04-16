@@ -16,29 +16,44 @@ class CDBStatus(StrEnum):
     UnknownBoard = position not in DB (but maybe now added)
     NoBestMove = position exists, but nevertheless no moves
     TrivialBoard = request for analysis was ignored because trivial position
+    LimitExceeded = too many requests from this client/ip/whatever
     '''
-    Ok           = auto()
-    Success      = auto()
-    GameOver     = auto()
-    UnknownBoard = auto()
-    NoBestMove   = auto()
-    TrivialBoard = auto()
+    Success       = "ok"
+    GameOver      = auto()
+    InvalidBoard  = "invalid board"
+    UnknownBoard  = "unknown"
+    NoBestMove    = "nobestmove"
+    TrivialBoard  = ""
+    LimitExceeded = "rate limit exceeded"
 
 
 #def _collect_params(params, **kwargs):
 #    return {k: v for k, v in kwargs.items() if v is not None}
 
 
-def _parse_status(text, board:chess.Board) -> CDBStatus:
-    if text == "invalid board":
-        raise ValueError(f'invalid board: {board.fen()}')
-    return {"ok":         CDBStatus.Ok,
-            # How to test the following?
-            "unknown":    CDBStatus.UnknownBoard,
-            "nobestmove": CDBStatus.NoBestMove,
-            "":           CDBStatus.TrivialBoard
-           }[text]
+def _prepare_params(board:chess.Board) -> dict | CDBStatus:
+    if board.is_game_over(claim_draw=True):
+        return CDBStatus.GameOver
+    return {'board': board.fen(),
+            'json': 1
+           }
 
+def _parse_status(text, board:chess.Board) -> CDBStatus:
+    status = CDBStatus(text)
+    if status is CDBStatus.InvalidBoard:
+        raise ValueError(f'invalid board: {board.fen()}')
+    return status
+
+# some notes:
+# 'queue', request for analysis, does a refresh of all child nodes, with recursive deep refresh of pv-lines thereof, minimum depth 20(ish) ply max 100 ply
+# whereas 'query' does only a shallow child refresh, a ply or two.
+# (exception: when too little material on the board, ....???)
+# additionally, for classical only, a background process tries its best to ensure all positions are connected to the
+# startpos in some way, every few days or so
+
+# moves retval: "rank" is similar to the notation in "notes", 2=best, 1=good, 0=worse, but may show 0 for all moves in a bad pos
+#               "notes" is as on the web interface, counting child nodes and annotating the move
+# ply retval: the shortest path from the rootpos to the classical startpos
 
 class AsyncCDBClient(httpx.AsyncClient):
     '''Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
@@ -61,14 +76,9 @@ class AsyncCDBClient(httpx.AsyncClient):
         super().__init__(**kwargs)
 
 
-    async def query_all_known_moves(self, board:chess.Board, showall=None, egtbmetric=None, learn=None) -> []:
-        if board.is_game_over(claim_draw=True):
-            return CDBStatus.GameOver
-
-        params = {'action': 'queryall',
-                  'board': board.fen(),
-                  'json': 1
-                 }
+    async def query_all_known_moves(self, board:chess.Board, showall=None, egtbmetric=None, learn=None) -> dict | CDBStatus:
+        params = _prepare_parms(board)
+        params['action'] = 'queryall',
         #if showall is not None:
         #    params['showall'] = showall
         #if egtbmetric is not None:
@@ -82,5 +92,16 @@ class AsyncCDBClient(httpx.AsyncClient):
         if (err := _parse_status(json['status'], board)) is not None:
             return err
         return json
+
+
+    async def request_analysis(self, board:chess.Board) -> CDBStatus:
+        params = _prepare_parms(board)
+        params['action'] = 'queue'
+
+        resp = await self.get(url=_CDBURL, params=params)
+
+        json = resp.json()
+        pprint(json)
+        return _parse_status(json['status'], board)
        
             
