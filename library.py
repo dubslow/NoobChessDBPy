@@ -21,9 +21,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
         super().__init__(**kwargs)
 
 
-    def analyze_single_line(self, pgn:str, nursery:trio.Nursery):
+    async def analyze_single_line(self, pgn:str):
         '''Given a single line of moves, `queue` for analysis all positions in this line.'''
         game = chess.pgn.read_game(StringIO(pgn))
         # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
-        for node in game.mainline():
-            nursery.start_soon(self.request_analysis, node.board())
+        async with trio.open_nursery() as nursery:
+            for node in game.mainline():
+                nursery.start_soon(self.request_analysis, node.board())

@@ -9,15 +9,14 @@ import logging
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    level=logging.DEBUG
+    level=logging.INFO
 )
 
 
 async def process_query_all(client, arg):
     #print(f"making Board for {arg}")
     board = chess.Board(arg)
-    #text = await client.query_all_known_moves(board)
-    text = await client.request_analysis(board)
+    text = await client.query_all_known_moves(board)
     print(f'for board:\n{board.unicode()}\ngot moves:\n{text}')
 
 async def query_all(args):
@@ -30,7 +29,7 @@ async def query_all(args):
 async def analyze_single_line(args):
     async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
         for arg in args:
-            lib.analyze_single_line(arg, nursery)
+            nursery.start_soon(lib.analyze_single_line, arg)
 
 
 if __name__ == '__main__':

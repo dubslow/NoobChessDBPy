@@ -33,16 +33,17 @@ class CDBStatus(StrEnum):
 class CDBError(Exception):
     pass
 
-#def _collect_params(params, **kwargs):
-#    return {k: v for k, v in kwargs.items() if v is not None}
 
-
-def _prepare_params(board:chess.Board) -> dict | CDBStatus:
-    if board.is_game_over(claim_draw=True):
+_known_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
+def _prepare_params(board:chess.Board, kwargs) -> dict | CDBStatus:
+    for kw in kwargs:
+        if kw not in _known_kwargs:
+            raise CDBError(f"unknown api argument: {kw}")
+    if board.is_game_over():
         return CDBStatus.GameOver
-    return {'board': board.fen(),
-            'json': 1
-           }
+    kwargs['board'] = board.fen()
+    kwargs['json']  = 1
+    return kwargs
 
 
 def _parse_status(text, board:chess.Board, raisers=None) -> CDBStatus:
@@ -72,11 +73,13 @@ def _parse_status(text, board:chess.Board, raisers=None) -> CDBStatus:
 class AsyncCDBClient(httpx.AsyncClient):
     '''Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
     
-    All queries require a chess.Board arugment,
+    All queries require a chess.Board arugment, and optionally accept a subset
+    of the following standard options: `showall`, `learn`, `egtbmetric`, `endgame`
+    all 1 or 0 except egtbmetric, which is "dtm" or "dtz"
+        showall = include unknown moves
+        learn = enable autoqueueing
+        endgame = show only TB data
     
-    # and optionally accept a subset of the following standard options:
-    # `showall`, `learn`, `egtbmetric`, `endgame`
-
     `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
     '''
 
@@ -91,18 +94,14 @@ class AsyncCDBClient(httpx.AsyncClient):
                  }
         super().__init__(**kwargs)
 
+    # query retval is json with keys "moves", "ply", "status", moves is list, each move has "note", "rank", "san", "score", "uci", "winrate"
 
-    async def query_all_known_moves(self, board:chess.Board, showall=None, egtbmetric=None, learn=None) -> dict | CDBStatus:
-        params = _prepare_params(board)
-        params['action'] = 'queryall',
-        #if showall is not None:
-        #    params['showall'] = showall
-        #if egtbmetric is not None:
-        #    params['egtbmetric'] = egtbmetric
-        #if learn is not None:
-        #    params['learn'] = learn
+    async def query_all_known_moves(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        params = _prepare_params(board, kwargs)
+        params['action'] = 'queryall'
 
         resp = await self.get(url=_CDBURL, params=params)
+
         json = resp.json()
         pprint(json)
         if (err := _parse_status(json['status'], board)) is not None:
@@ -110,8 +109,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         return json
 
 
-    async def request_analysis(self, board:chess.Board, raisers:set=None) -> CDBStatus:
-        params = _prepare_params(board)
+    async def request_analysis(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
+        params = _prepare_params(board, kwargs)
         params['action'] = 'queue'
 
         resp = await self.get(url=_CDBURL, params=params)
