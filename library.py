@@ -21,34 +21,38 @@ def legal_child_boards(self, stack=True) -> chess.Board:
         new.push(move)
         yield new
 
-def breadth_first_iterator(self, maxply=None):
-    '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
-    subject to ply <= `maxply` (min 1). Order of moves in a given position is arbitrary,
-    whatever `chess.Board` does.'''
-    copystack = bool(maxply) # when no limit, dont bother to copy needless stack
-    if maxply is not None:
-        if maxply < 1:
-            raise ValueError(f"maxply must be at least 1 (got {maxply})")
-    else:
-        maxply = math.inf
-
-    board = self.copy(stack=False) # Ensure the ply counter means what we need it to
-    queue = deque(board.legal_child_boards(stack=copystack)) # still need a do...while syntax!
-    board = queue.popleft() # like honestly pls just give us do...while
-    while board.ply() < maxply:
-        yield board
-        for child in board.legal_child_boards():
-            queue.append(move) # In unlimited mode, the queue is on average "fucking big"
-        board = queue.popleft()
 
 chess.Board.legal_child_boards = legal_child_boards
 chess.Board.breadth_first_iterator = breadth_first_iterator
 
+def _sanitize_int_limit(n):
+    if n < 1:
+        raise ValueError(f"limit must be at least 1 (got {n})")
+
+
 class BreadthFirstState:
+    '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
+    subject to ply <= `maxply` (min 1). Order of moves in a given position is arbitrary,
+    whatever `chess.Board` does.'''
     def __init__(self, rootpos:chess.Board):
         self.rootpos = rootpos
-        self.queue = deque()
+        self.board = rootpos.copy(stack=False) # Ensure the ply counter means what we need it to
+        self.queue = deque(board.legal_child_boards())
     # ... iterator here
+    def continue(self, maxply=math.inf, count=math.inf, _copystack=True):
+        # _copystack=False disables maxply in exchange for speed
+        maxply = _sanitize_int_limit(maxply)
+        count = _sanitize_int_limit(count)
+        n = 0
+
+        self.board = self.queue.popleft() # still need a do...while syntax!
+        while self.board.ply() < maxply and n < count:
+            n += 1
+            yield self.board
+            self.queue.extend(self.board.legal_child_boards(stack=copystack))
+            # In unlimited mode, the queue is on average "fucking big"
+            self.board = self.queue.popleft()
+
 
 class AsyncCDBLibrary(AsyncCDBClient):
     '''In general, we try to reuse a single client as much as possible, so algorithms are implemented
