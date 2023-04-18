@@ -66,9 +66,10 @@ def _parse_status(text, board:chess.Board, raisers=None) -> CDBStatus:
 # startpos in some way, every few days or so
 # 'store' effectively creates a new child node, however directly 'queue'ing the child node position will automatically link that child to its parent.
 
-# moves retval: "rank" is similar to the notation in "notes", 2=best, 1=good, 0=worse, but may show 0 for all moves in a bad pos
-#               "notes" is as on the web interface, counting child nodes and annotating the move
-# ply retval: the shortest path from the rootpos to the classical startpos
+# query retval is json with keys "moves", "ply", "status", moves is list, each move has "note", "rank", "san", "score", "uci", "winrate"
+# moves: "rank" is similar to the notation in "notes", 2=best, 1=good, 0=worse, but may show 0 for all moves in a bad pos
+#        "notes" is as on the web interface, counting child nodes and annotating the move
+# ply: the shortest path from the rootpos to the classical startpos
 
 class AsyncCDBClient(httpx.AsyncClient):
     '''Asynchronous Python interface to the CDB API, using `httpx` and `chess`.

@@ -5,11 +5,50 @@ Arguments may be either `chess` objects or strings, altho work TBD to handle str
 
 import chess
 import chess.pgn
-from api import AsyncCDBClient, CDBStatus
 import trio
+from api import AsyncCDBClient, CDBStatus
 from io import StringIO
+import math
 from pprint import pprint
 
+# Manually extend chess.Board with a couple more utility algorithms:
+
+def legal_child_boards(self, stack=True) -> chess.Board:
+    '''A generator over the `legal_moves` of `self`, yielding *copies* of the
+    resulting boards. `stack` is the same as for `self.copy`.'''
+    for move in self.legal_moves:
+        new = self.copy(stack=stack)
+        new.push(move)
+        yield new
+
+def breadth_first_iterator(self, maxply=None):
+    '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
+    subject to ply <= `maxply` (min 1). Order of moves in a given position is arbitrary,
+    whatever `chess.Board` does.'''
+    copystack = bool(maxply) # when no limit, dont bother to copy needless stack
+    if maxply is not None:
+        if maxply < 1:
+            raise ValueError(f"maxply must be at least 1 (got {maxply})")
+    else:
+        maxply = math.inf
+
+    board = self.copy(stack=False) # Ensure the ply counter means what we need it to
+    queue = deque(board.legal_child_boards(stack=copystack)) # still need a do...while syntax!
+    board = queue.popleft() # like honestly pls just give us do...while
+    while board.ply() < maxply:
+        yield board
+        for child in board.legal_child_boards():
+            queue.append(move) # In unlimited mode, the queue is on average "fucking big"
+        board = queue.popleft()
+
+chess.Board.legal_child_boards = legal_child_boards
+chess.Board.breadth_first_iterator = breadth_first_iterator
+
+class BreadthFirstState:
+    def __init__(self, rootpos:chess.Board):
+        self.rootpos = rootpos
+        self.queue = deque()
+    # ... iterator here
 
 class AsyncCDBLibrary(AsyncCDBClient):
     '''In general, we try to reuse a single client as much as possible, so algorithms are implemented
@@ -27,6 +66,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
         async with trio.open_nursery() as nursery:
             for node in game.mainline():
                 nursery.start_soon(self.request_analysis, node.board())
+
+
+    async def query_breadth_first(self, rootpos:chess.Board, send_channel:trio.MemorySendChannel, maxply=None):
+        '''Query all child positions and transmit the moves over `send_channel`'''
+        for board in rootpos.breadth_first_iterator(maxply):
+            json = await self.query_all_known_moves(board)
+            await send_channel.send(json["moves"])
+
 
 
     async def breadth_first_speedtest(self, rootpos:chess.Board=None, concurrency=32):
