@@ -26,15 +26,9 @@ async def query_all(args):
             nursery.start_soon(process_query_all, client, arg)
 
 
-async def analyze_single_line(args):
-    async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
-        for arg in args:
-            nursery.start_soon(lib.analyze_single_line, arg)
-
-
 if __name__ == '__main__':
     from sys import argv
     args = argv[1:]
     if not args:
         raise ValueError('pass some FEN dumbdumb')
-    trio.run(analyze_single_line, args)
+    trio.run(query_all, args)

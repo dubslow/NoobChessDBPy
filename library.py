@@ -61,7 +61,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         super().__init__(**kwargs)
 
 
-    async def analyze_single_line(self, pgn:str):
+    async def queue_single_line(self, pgn:str):
         '''Given a single line of moves, `queue` for analysis all positions in this line.'''
         game = chess.pgn.read_game(StringIO(pgn))
         # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
