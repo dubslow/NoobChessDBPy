@@ -21,14 +21,12 @@ def legal_child_boards(self, stack=True) -> chess.Board:
         new.push(move)
         yield new
 
-
 chess.Board.legal_child_boards = legal_child_boards
-chess.Board.breadth_first_iterator = breadth_first_iterator
+
 
 def _sanitize_int_limit(n):
     if n < 1:
         raise ValueError(f"limit must be at least 1 (got {n})")
-
 
 class BreadthFirstState:
     '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
@@ -38,8 +36,8 @@ class BreadthFirstState:
         self.rootpos = rootpos
         self.board = rootpos.copy(stack=False) # Ensure the ply counter means what we need it to
         self.queue = deque(board.legal_child_boards())
-    # ... iterator here
-    def continue(self, maxply=math.inf, count=math.inf, _copystack=True):
+
+    def iter_resume(self, maxply=math.inf, count=math.inf, _copystack=True):
         # _copystack=False disables maxply in exchange for speed
         maxply = _sanitize_int_limit(maxply)
         count = _sanitize_int_limit(count)
@@ -69,13 +67,25 @@ class AsyncCDBLibrary(AsyncCDBClient):
         # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
         async with trio.open_nursery() as nursery:
             for node in game.mainline():
-                nursery.start_soon(self.request_analysis, node.board())
+                nursery.start_soon(self.queue, node.board())
 
 
-    async def query_breadth_first(self, rootpos:chess.Board, send_channel:trio.MemorySendChannel, maxply=None):
+    async def query_breadth_first_static(self, rootpos:chess.Board, maxply=None, count=None):
+        pass
+        #with trio.open_nursery() as nursery:
+            #for board in pass:
+
+    async def _query_breadth_first_producer(self, send_channel:trio.MemorySendChannel,
+                                                  state:BreadthFirstState=None,
+                                                  maxply=math.inf, count=math.inf):
+        async with send_channel:
+            for board in state.iter_resume(maxply, count):
+                await send_channel.send(board)    
+
+    async def query_breadth_first_dynamic(self, rootpos:chess.Board, send_channel:trio.MemorySendChannel, maxply=None):
         '''Query all child positions and transmit the moves over `send_channel`'''
         for board in rootpos.breadth_first_iterator(maxply):
-            json = await self.query_all_known_moves(board)
+            json = await self.query_all(board)
             await send_channel.send(json["moves"])
 
 
@@ -113,6 +123,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
     async def _speedtest_worker(self, recv_channel):
         async with recv_channel: # never forget to clean up!
             async for board in recv_channel:
-                await self.query_all_known_moves(board, learn=0)
+                await self.query_all(board, learn=0)
 
 

@@ -97,7 +97,8 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     # query retval is json with keys "moves", "ply", "status", moves is list, each move has "note", "rank", "san", "score", "uci", "winrate"
 
-    async def query_all_known_moves(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''Query all known moves for a given position'''
         params = _prepare_params(board, kwargs)
         params['action'] = 'queryall'
 
@@ -110,7 +111,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         return json
 
 
-    async def request_analysis(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
+    async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
+        '''Queue for later analysis a single position'''
         params = _prepare_params(board, kwargs)
         params['action'] = 'queue'
 
