@@ -30,11 +30,27 @@ logging.basicConfig(
 )
 
 
-async def queue_single_line(args):
+async def queue_and_query_single_line(args, time=29):
+    '''Probably this function is of not-so-great utility, as the requisite waiting time for reverse-querying to be useful
+    is highly variable and frequently more than a minute. Best stick with just the queue instead.
+
+    (Otherwise, the core idea is that, after queuing for analysis, sometimes CDB doesn't immediately connect all the moves
+    and positions together, impeding backpropagation of leaf scores to their parents. Querying in reverse order can
+    sometimes hasten connections and backpropagation, however in any case the connections are always made within a day
+    or two by CDB backend tree-integrity processes.)'''
     async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
+        games = []
         for arg in args:
             game = chess.pgn.read_game(StringIO(arg))
+            games.append(game)
+            print("queuing game...")
             nursery.start_soon(lib.queue_single_line, game)
+        print(f"queued all games, waiting for {time=}...")
+        await trio.sleep(time) # 10? 30? 60? how long do queues take lol (default timing based on only 1 arg)
+        print("waited, now reverse querying the games...")
+        for game in games:
+            print("reverse querying game...")
+            nursery.start_soon(lib.query_reverse_single_line, game)
 
 
 if __name__ == '__main__':
@@ -42,4 +58,4 @@ if __name__ == '__main__':
     args = argv[1:]
     if not args:
         raise ValueError('pass some FEN dumbdumb')
-    trio.run(queue_single_line, args)
+    trio.run(queue_and_query_single_line, args, 61)

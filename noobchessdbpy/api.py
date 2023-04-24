@@ -65,13 +65,13 @@ def _prepare_params(board:chess.Board, kwargs) -> dict | CDBStatus:
 
 def _parse_status(text, board:chess.Board, raisers=None) -> CDBStatus:
     if raisers is None:
-        raisers = set(CDBStatus) - {CDBStatus.Success}
+        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard}
     try:
         status = CDBStatus(text)
     except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
         raise CDBError(f"problem with query ({board.fen()=})") from e
     if status in raisers:
-        raise CDBError(f'{status}: {board.fen()=}')
+        raise CDBError(f'{status=}: {board.fen()=}')
     return status
 
 
@@ -132,6 +132,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         json = resp.json()
         #print(json)
         #print(resp.http_version)
+        print(json['status'])
         if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
             return err
         return json

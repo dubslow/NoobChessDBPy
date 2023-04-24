@@ -24,7 +24,6 @@ import chess
 import chess.pgn
 import trio
 from .api import AsyncCDBClient, CDBStatus
-from io import StringIO
 import math
 from collections import deque
 from pprint import pprint
@@ -82,6 +81,21 @@ class AsyncCDBLibrary(AsyncCDBClient):
         super().__init__(**kwargs)
 
 
+    async def queue_single_line(self, pgn:chess.pgn.GameNode):
+        '''Given a single line of moves, `queue` for analysis all positions in this line.'''
+        # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
+        async with trio.open_nursery() as nursery:
+            for node in pgn.mainline():
+                nursery.start_soon(self.queue, node.board())
+
+    async def query_reverse_single_line(self, pgn:chess.pgn.GameNode):
+        '''Given a single line of moves, `query` in reverse the positions to aid backpropagation.'''
+        async with trio.open_nursery() as nursery:
+            for node in reversed(pgn.mainline()):
+                nursery.start_soon(self.query_all, node.board())
+                await trio.sleep(0.001) # this doesn't guarantee order of query, but theoretically helps
+
+
     @staticmethod
     async def _serializer(serialize_recv, collector):
         # in theory, we shouldn't need the collector arg, instead making our own
@@ -89,15 +103,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
         async with serialize_recv:
             async for val in serialize_recv:
                 collector.append(val)
-
-
-    async def queue_single_line(self, pgn:str):
-        '''Given a single line of moves, `queue` for analysis all positions in this line.'''
-        game = chess.pgn.read_game(StringIO(pgn))
-        # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
-        async with trio.open_nursery() as nursery:
-            for node in game.mainline():
-                nursery.start_soon(self.queue, node.board())
 
 
     async def query_breadth_first_static(self, rootpos:chess.Board, concurrency=128, maxply=math.inf, count=math.inf):
