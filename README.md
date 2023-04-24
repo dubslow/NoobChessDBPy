@@ -1,4 +1,4 @@
-A currently-skeleton python interface to CDB using async+trio.
+A currently-skeletal python interface to CDB using async+trio.
 
 See `scripts/` for basic usage examples, together with `help()` on the imports
 demonstrated therein.
@@ -24,3 +24,4 @@ python queue_single_line.py $'1. e4 c6 2. Nf3 d5 3. Nc3 Nf6 4. e5 Ne4 5. Ne2 Bf5
 *'
 # that starts analysis of every position in that line. the $' ' shell quoting allows
 # longform pgn to be quoted into a single shell arg
+```
