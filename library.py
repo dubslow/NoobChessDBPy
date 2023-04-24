@@ -9,6 +9,7 @@ import trio
 from api import AsyncCDBClient, CDBStatus
 from io import StringIO
 import math
+from collections import deque
 from pprint import pprint
 
 # Manually extend chess.Board with a couple more utility algorithms:
@@ -25,40 +26,52 @@ chess.Board.legal_child_boards = legal_child_boards
 
 
 def _sanitize_int_limit(n):
-    if n < 1:
+    if n is None or n < 1:
         raise ValueError(f"limit must be at least 1 (got {n})")
 
 class BreadthFirstState:
     '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
     subject to ply <= `maxply` (min 1). Order of moves in a given position is arbitrary,
-    whatever `chess.Board` does.'''
+    whatever `chess.Board` does. `maxply` compares directly against `rootpos.ply()`.'''
     def __init__(self, rootpos:chess.Board):
         self.rootpos = rootpos
-        self.board = rootpos.copy(stack=False) # Ensure the ply counter means what we need it to
-        self.queue = deque(board.legal_child_boards())
+        self.board = rootpos.copy(stack=False)
+        self.queue = deque(self.board.legal_child_boards())
 
-    def iter_resume(self, maxply=math.inf, count=math.inf, _copystack=True):
+    def iter_resume(self, maxply=math.inf, count=math.inf):
         # _copystack=False disables maxply in exchange for speed
-        maxply = _sanitize_int_limit(maxply)
-        count = _sanitize_int_limit(count)
+        _sanitize_int_limit(maxply)
+        _sanitize_int_limit(count)
         n = 0
 
         self.board = self.queue.popleft() # still need a do...while syntax!
-        while self.board.ply() < maxply and n < count:
+        print(f"ASDF {self.board.ply()=}, {maxply=}")
+        while self.board.ply() <= maxply and n < count:
             n += 1
             yield self.board
-            self.queue.extend(self.board.legal_child_boards(stack=copystack))
+            self.queue.extend(self.board.legal_child_boards(stack=False))
             # In unlimited mode, the queue is on average "fucking big"
             self.board = self.queue.popleft()
+            print(f"asdf {n=} {self.board.ply()=}, {maxply=}")
 
 
 class AsyncCDBLibrary(AsyncCDBClient):
     '''In general, we try to reuse a single client as much as possible, so algorithms are implemented
     as a subclass of the client.'''
+
     # Maybe we can later export static variations which construct a new client on each call?
     def __init__(self, **kwargs):
         '''This AsyncCDBClient subclass may be initialized with any kwargs of the parent class'''
         super().__init__(**kwargs)
+
+
+    @staticmethod
+    async def _serializer(serialize_recv, collector):
+        # in theory, we shouldn't need the collector arg, instead making our own
+        # and returning it to the nursery...
+        async with serialize_recv:
+            async for val in serialize_recv:
+                collector.append(val)
 
 
     async def queue_single_line(self, pgn:str):
@@ -70,24 +83,36 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 nursery.start_soon(self.queue, node.board())
 
 
-    async def query_breadth_first_static(self, rootpos:chess.Board, maxply=None, count=None):
-        pass
-        #with trio.open_nursery() as nursery:
-            #for board in pass:
+    async def query_breadth_first_static(self, rootpos:chess.Board, concurrency=128, maxply=math.inf, count=math.inf):
+        bfs = BreadthFirstState(rootpos)
+        async with trio.open_nursery() as nursery:
+            # about the branching factor should be optimal buffer (tasks close their channel)
+            bfs_send, bfs_recv = trio.open_memory_channel(concurrency)
+            nursery.start_soon(self._query_breadth_first_producer, bfs_send, bfs, maxply, count)
 
-    async def _query_breadth_first_producer(self, send_channel:trio.MemorySendChannel,
-                                                  state:BreadthFirstState=None,
+            results = []
+            serialize_send, serialize_recv = trio.open_memory_channel(math.inf)
+            nursery.start_soon(self._serializer, serialize_recv, results)
+
+            async with bfs_recv, serialize_send:
+                for i in range(concurrency):
+                    nursery.start_soon(self._query_breadth_first_consumer, bfs_recv.clone(), serialize_send.clone())
+
+        #return nursery.results
+        return results
+
+    async def _query_breadth_first_consumer(self, bfs_recv:trio.MemoryReceiveChannel,
+                                                  serialize_send:trio.MemorySendChannel):
+        async with bfs_recv, serialize_send:
+            async for board in bfs_recv:
+                await serialize_send.send(await self.query_all(board))
+
+    async def _query_breadth_first_producer(self, bfs_send:trio.MemorySendChannel,
+                                                  state:BreadthFirstState,
                                                   maxply=math.inf, count=math.inf):
-        async with send_channel:
+        async with bfs_send:
             for board in state.iter_resume(maxply, count):
-                await send_channel.send(board)    
-
-    async def query_breadth_first_dynamic(self, rootpos:chess.Board, send_channel:trio.MemorySendChannel, maxply=None):
-        '''Query all child positions and transmit the moves over `send_channel`'''
-        for board in rootpos.breadth_first_iterator(maxply):
-            json = await self.query_all(board)
-            await send_channel.send(json["moves"])
-
+                await bfs_send.send(board)
 
 
     async def breadth_first_speedtest(self, rootpos:chess.Board=None, concurrency=32):

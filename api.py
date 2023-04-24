@@ -105,8 +105,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
 
         json = resp.json()
-        pprint(json)
-        if (err := _parse_status(json['status'], board)) is not None:
+        #print(json)
+        if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
             return err
         return json
 
@@ -119,7 +119,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
 
         json = resp.json()
-        pprint(json)
+        print(json)
         return _parse_status(json['status'], board, raisers)
             
 
