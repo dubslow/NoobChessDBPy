@@ -15,8 +15,8 @@
 #
 #    See the LICENSE file for more details.
 
-from api import AsyncCDBClient
-from library import AsyncCDBLibrary
+from noobchessdbpy.api import AsyncCDBClient
+from noobchessdbpy.library import AsyncCDBLibrary
 import trio
 import chess
 import logging
@@ -28,18 +28,22 @@ logging.basicConfig(
 )
 
 
-async def query_bfs():
-    rootpos = chess.Board()
-    async with AsyncCDBLibrary() as lib:
-        results = await lib.query_breadth_first_static(rootpos, concurrency=128, count=4096)
-    #for res in results:
-    #    print(res['moves'][1])
-        
+async def process_query_all(client, arg):
+    #print(f"making Board for {arg}")
+    board = chess.Board(arg)
+    text = await client.query_all(board)
+    print(f'for board:\n{board.unicode()}\ngot moves:\n{text}')
+
+async def query_all(args):
+    async with AsyncCDBClient() as client, trio.open_nursery() as nursery:
+        for arg in args:
+            #print(f'spawning for {arg}')
+            nursery.start_soon(process_query_all, client, arg)
 
 
 if __name__ == '__main__':
-#    from sys import argv
-#    args = argv[1:]
-#    if not args:
-#        raise ValueError('pass some FEN dumbdumb')
-    trio.run(query_bfs)#, args)
+    from sys import argv
+    args = argv[1:]
+    if not args:
+        raise ValueError('pass some FEN dumbdumb')
+    trio.run(query_all, args)

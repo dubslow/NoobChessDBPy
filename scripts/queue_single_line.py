@@ -15,8 +15,8 @@
 #
 #    See the LICENSE file for more details.
 
-from api import AsyncCDBClient
-from library import AsyncCDBLibrary
+from noobchessdbpy.api import AsyncCDBClient
+from noobchessdbpy.library import AsyncCDBLibrary
 import trio
 import chess
 import logging

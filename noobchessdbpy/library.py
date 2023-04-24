@@ -15,6 +15,7 @@
 #
 #    See the LICENSE file for more details.
 
+__all__ = ['BreadthFirstState', 'AsyncCDBLibrary']
 
 '''This file implements some standard CDB interaction algorithms, building atop the API.
 Arguments may be either `chess` objects or strings, altho work TBD to handle strings'''
@@ -22,7 +23,7 @@ Arguments may be either `chess` objects or strings, altho work TBD to handle str
 import chess
 import chess.pgn
 import trio
-from api import AsyncCDBClient, CDBStatus
+from .api import AsyncCDBClient, CDBStatus
 from io import StringIO
 import math
 from collections import deque
