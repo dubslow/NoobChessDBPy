@@ -26,7 +26,7 @@ import chess
 from enum import StrEnum, auto
 from pprint import pprint
 
-_CDBURL = 'http://www.chessdb.cn/cdb.php'
+_CDBURL = 'https://www.chessdb.cn/cdb.php'
 
 class CDBStatus(StrEnum):
     '''Enum used for non-moves return values from CDB.
@@ -108,6 +108,11 @@ class AsyncCDBClient(httpx.AsyncClient):
                   #'base_url': _CDBURL,
                   'headers': {'user-agent': 'noobchessdbpy'},
                   'timeout': 30,
+                  'limits': httpx.Limits(max_keepalive_connections=None,
+                                         max_connections=None,
+                                         keepalive_expiry=30
+                                        ),
+                  #'http2': True,
                   **_kwargs
                  }
         super().__init__(**kwargs)
@@ -123,6 +128,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         json = resp.json()
         #print(json)
+        #print(resp.http_version)
         if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
             return err
         return json

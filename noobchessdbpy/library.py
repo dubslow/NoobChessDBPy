@@ -104,7 +104,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         bfs = BreadthFirstState(rootpos)
         async with trio.open_nursery() as nursery:
             # about the branching factor should be optimal buffer (tasks close their channel)
-            bfs_send, bfs_recv = trio.open_memory_channel(concurrency)
+            bfs_send, bfs_recv = trio.open_memory_channel(2*concurrency)
             nursery.start_soon(self._query_breadth_first_producer, bfs_send, bfs, maxply, count)
 
             results = []
