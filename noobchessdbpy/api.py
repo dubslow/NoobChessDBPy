@@ -146,7 +146,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         json = resp.json()
         print(json)
-        return _parse_status(json['status'], board, raisers)
+        return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
             
 
 
