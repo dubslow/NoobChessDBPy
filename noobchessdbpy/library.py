@@ -68,7 +68,7 @@ class BreadthFirstState:
             self.queue.extend(self.board.legal_child_boards(stack=False))
             # In unlimited mode, the queue is on average "fucking big"
             self.board = self.queue.popleft()
-            print(f"asdf {n=} {self.board.ply()=}, {maxply=}")
+            #print(f"asdf {n=} {self.board.ply()=}, {maxply=}")
 
 
 class AsyncCDBLibrary(AsyncCDBClient):
@@ -107,13 +107,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     async def query_breadth_first_static(self, rootpos:chess.Board, concurrency=128, maxply=math.inf, count=math.inf):
         bfs = BreadthFirstState(rootpos)
+        print(f"{concurrency=} {count=}")
         async with trio.open_nursery() as nursery:
             # about the branching factor should be optimal buffer (tasks close their channel)
             bfs_send, bfs_recv = trio.open_memory_channel(2*concurrency)
             nursery.start_soon(self._query_breadth_first_producer, bfs_send, bfs, maxply, count)
 
             results = []
-            serialize_send, serialize_recv = trio.open_memory_channel(math.inf)
+            serialize_send, serialize_recv = trio.open_memory_channel(concurrency)
             nursery.start_soon(self._serializer, serialize_recv, results)
 
             async with bfs_recv, serialize_send:

@@ -134,7 +134,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         json = resp.json()
         #print(json)
         #print(resp.http_version)
-        print(json['status'])
+        #print(json['status'])
         if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
             return err
         return json
