@@ -125,6 +125,8 @@ class AsyncCDBClient(httpx.AsyncClient):
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''Query all known moves for a given position'''
         params = _prepare_params(board, kwargs)
+        if not isinstance(params, dict):
+            return params
         params['action'] = 'queryall'
 
         resp = await self.get(url=_CDBURL, params=params)
@@ -141,6 +143,8 @@ class AsyncCDBClient(httpx.AsyncClient):
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''Queue for later analysis a single position'''
         params = _prepare_params(board, kwargs)
+        if not isinstance(params, dict):
+            return params
         params['action'] = 'queue'
 
         resp = await self.get(url=_CDBURL, params=params)
