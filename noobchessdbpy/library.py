@@ -28,8 +28,9 @@ import math
 from collections import deque
 from pprint import pprint
 
-# Manually extend chess.Board with a couple more utility algorithms:
+########################################################################################################################
 
+# Manually extend chess.Board with a utility algorithm:
 def legal_child_boards(self, stack=True) -> chess.Board:
     '''A generator over the `legal_moves` of `self`, yielding *copies* of the
     resulting boards. `stack` is the same as for `self.copy`.'''
@@ -37,13 +38,14 @@ def legal_child_boards(self, stack=True) -> chess.Board:
         new = self.copy(stack=stack)
         new.push(move)
         yield new
-
 chess.Board.legal_child_boards = legal_child_boards
 
 
 def _sanitize_int_limit(n):
     if n is None or n < 1:
         raise ValueError(f"limit must be at least 1 (got {n})")
+
+########################################################################################################################
 
 class BreadthFirstState:
     '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
@@ -80,6 +82,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         '''This AsyncCDBClient subclass may be initialized with any kwargs of the parent class'''
         super().__init__(**kwargs)
 
+    ####################################################################################################################
 
     async def queue_single_line(self, pgn:chess.pgn.GameNode):
         '''Given a single line of moves, `queue` for analysis all positions in this line.'''
@@ -95,20 +98,22 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 nursery.start_soon(self.query_all, node.board())
                 await trio.sleep(0.001) # this doesn't guarantee order of query, but theoretically helps
 
+    ####################################################################################################################
 
     @staticmethod
     async def _serializer(recv_serialize, collector):
-        # in theory, we shouldn't need the collector arg, instead making our own
-        # and returning it to the nursery...
+        # in theory, we shouldn't need the collector arg, instead making our own and returning it to the nursery...
         async with recv_serialize:
             async for val in recv_serialize:
                 collector.append(val)
 
 
-    async def query_breadth_first_static(self, bfs:BreadthFirstState, concurrency=256, maxply=math.inf, count=math.inf):
+    async def query_breadth_first(self, bfs:BreadthFirstState, concurrency=256, maxply=math.inf, count=math.inf):
+        '''Query CDB positions in breadth-first order, using the given BreadthFirstState. Returns a list of the API's
+        json output.'''
         print(f"{concurrency=} {count=}")
         async with trio.open_nursery() as nursery:
-            # about the branching factor should be optimal buffer (tasks close their channel)
+            # in general, we use the "tasks close their channel" pattern
             send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
             nursery.start_soon(self._query_breadth_first_producer, send_bfs, bfs, maxply, count)
 
@@ -128,11 +133,47 @@ class AsyncCDBLibrary(AsyncCDBClient):
             async for board in recv_bfs:
                 await send_serialize.send(await self.query_all(board))
 
-    async def _query_breadth_first_producer(self, send_bfs:trio.MemorySendChannel,
-                                                  state:BreadthFirstState,
+    async def _query_breadth_first_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
                                                   maxply=math.inf, count=math.inf):
         async with send_bfs:
-            for board in state.iter_resume(maxply, count):
+            for board in bfs.iter_resume(maxply, count):
                 await send_bfs.send(board)
+
+    # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
+    # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
+    # enables more accurate estimation (and less overshoot) of queries needed to reach `filtercount` positions.
+    async def query_breadth_first_filter(self, bfs:BreadthFirstState, filter, filtercount, concurrency=256):
+        print(f"{concurrency=} {count=}")
+        async with trio.open_nursery() as nursery:
+            nursery.done = trio.Event()
+            # hack: we use this as a counter, without having to separately store a lock and variable
+            nursery.count = trio.Sempahore()  # release = increment lol
+
+            # in general, we use the "tasks close their channel" pattern
+            send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
+            nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
+
+            results = []
+            send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+            nursery.start_soon(self._serializer, recv_serialize, results)
+
+            async with recv_bfs, send_serialize:
+                for i in range(concurrency):
+                    nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
+
+        return results
+
+    async def _query_breadth_filter_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
+                                                  send_serialize:trio.MemorySendChannel):
+        async with recv_bfs, send_serialize:
+            async for board in recv_bfs:
+                await send_serialize.send(await self.query_all(board))
+
+    async def _query_breadth_filter_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
+                                                  maxply=math.inf, count=math.inf):
+        async with send_bfs:
+            for board in bfs.iter_resume(maxply, count):
+                await send_bfs.send(board)
+
 
 
