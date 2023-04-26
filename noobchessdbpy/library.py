@@ -97,44 +97,42 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
 
     @staticmethod
-    async def _serializer(serialize_recv, collector):
+    async def _serializer(recv_serialize, collector):
         # in theory, we shouldn't need the collector arg, instead making our own
         # and returning it to the nursery...
-        async with serialize_recv:
-            async for val in serialize_recv:
+        async with recv_serialize:
+            async for val in recv_serialize:
                 collector.append(val)
 
 
-    async def query_breadth_first_static(self, rootpos:chess.Board, concurrency=128, maxply=math.inf, count=math.inf):
-        bfs = BreadthFirstState(rootpos)
+    async def query_breadth_first_static(self, bfs:BreadthFirstState, concurrency=256, maxply=math.inf, count=math.inf):
         print(f"{concurrency=} {count=}")
         async with trio.open_nursery() as nursery:
             # about the branching factor should be optimal buffer (tasks close their channel)
-            bfs_send, bfs_recv = trio.open_memory_channel(2*concurrency)
-            nursery.start_soon(self._query_breadth_first_producer, bfs_send, bfs, maxply, count)
+            send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
+            nursery.start_soon(self._query_breadth_first_producer, send_bfs, bfs, maxply, count)
 
             results = []
-            serialize_send, serialize_recv = trio.open_memory_channel(concurrency)
-            nursery.start_soon(self._serializer, serialize_recv, results)
+            send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+            nursery.start_soon(self._serializer, recv_serialize, results)
 
-            async with bfs_recv, serialize_send:
+            async with recv_bfs, send_serialize:
                 for i in range(concurrency):
-                    nursery.start_soon(self._query_breadth_first_consumer, bfs_recv.clone(), serialize_send.clone())
+                    nursery.start_soon(self._query_breadth_first_consumer, recv_bfs.clone(), send_serialize.clone())
 
-        #return nursery.results
         return results
 
-    async def _query_breadth_first_consumer(self, bfs_recv:trio.MemoryReceiveChannel,
-                                                  serialize_send:trio.MemorySendChannel):
-        async with bfs_recv, serialize_send:
-            async for board in bfs_recv:
-                await serialize_send.send(await self.query_all(board))
+    async def _query_breadth_first_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
+                                                  send_serialize:trio.MemorySendChannel):
+        async with recv_bfs, send_serialize:
+            async for board in recv_bfs:
+                await send_serialize.send(await self.query_all(board))
 
-    async def _query_breadth_first_producer(self, bfs_send:trio.MemorySendChannel,
+    async def _query_breadth_first_producer(self, send_bfs:trio.MemorySendChannel,
                                                   state:BreadthFirstState,
                                                   maxply=math.inf, count=math.inf):
-        async with bfs_send:
+        async with send_bfs:
             for board in state.iter_resume(maxply, count):
-                await bfs_send.send(board)
+                await send_bfs.send(board)
 
 

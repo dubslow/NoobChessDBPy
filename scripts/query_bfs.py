@@ -16,7 +16,7 @@
 #    See the LICENSE file for more details.
 
 from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
 import trio
 import chess
 import logging
@@ -31,7 +31,7 @@ logging.basicConfig(
 async def query_bfs():
     rootpos = chess.Board()
     async with AsyncCDBLibrary() as lib:
-        results = await lib.query_breadth_first_static(rootpos, concurrency=256, maxply=2)
+        results = await lib.query_breadth_first_static(BreadthFirstState(rootpos), concurrency=256, count=4096)
     #for res in results:
     #    print(res['moves'][1])
         
