@@ -120,10 +120,20 @@ class AsyncCDBClient(httpx.AsyncClient):
                  }
         super().__init__(**kwargs)
 
-    # query retval is json with keys "moves", "ply", "status", moves is list, each move has "note", "rank", "san", "score", "uci", "winrate"
 
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
-        '''Query all known moves for a given position'''
+        '''Query all known moves for a given position
+
+        Query retval is json with keys "moves", "ply", "status"
+        "moves" is a list, each move has "note", "rank", "san", "score", "uci", "winrate"
+            "score" is in centipawns, from side-to-move perspective
+            "winrate" is ? (expected score or 1-drawrate?)
+            "rank" is similar to the notation in "Notes", 2=best, 1=good, 0=worse but may show 0 for all moves in a bad pos
+            "notes" is as on the web interface, counting child nodes and annotating the move
+            "san" and "uci" describe the move itself in the respective notation
+        "ply": the shortest path from the rootpos to the classical startpos
+        "status": see CDBStatus
+        '''
         params = _prepare_params(board, kwargs)
         if not isinstance(params, dict):
             return params
@@ -132,7 +142,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
 
         json = resp.json()
-        #print(json)
+        #pprint(json)
         #print(resp.http_version)
         #print(json['status'])
         if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
@@ -150,7 +160,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
 
         json = resp.json()
-        print(json)
+        #print(json)
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
             
 
