@@ -54,26 +54,27 @@ class CDBError(Exception):
 
 
 _known_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
-def _prepare_params(board:chess.Board, kwargs) -> dict | CDBStatus:
+def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     for kw in kwargs:
         if kw not in _known_kwargs:
             raise CDBError(f"unknown api argument: {kw}")
-    if board.is_game_over():
-        return CDBStatus.GameOver
-    kwargs['board'] = board.fen()
     kwargs['json']  = 1
+    if board:
+        if board.is_game_over():
+            return CDBStatus.GameOver
+        kwargs['board'] = board.fen()
     return kwargs
 
 
-def _parse_status(text, board:chess.Board, raisers=None) -> CDBStatus:
+def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
     if raisers is None:
         raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard}
     try:
         status = CDBStatus(text)
     except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
-        raise CDBError(f"problem with query ({board.fen()=})") from e
+        raise CDBError(f"problem with query (board: {board.fen() if board else None})") from e
     if status in raisers:
-        raise CDBError(f'{status=}: {board.fen()=}')
+        raise CDBError(f"{status=} (board: {board.fen() if board else None})")
     return status
 
 
@@ -137,7 +138,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         "ply": the shortest path from the rootpos to the classical startpos
         "status": see CDBStatus
         '''
-        params = _prepare_params(board, kwargs)
+        params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
             return params
         params['action'] = 'queryall'
@@ -155,7 +156,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''Queue for later analysis a single position'''
-        params = _prepare_params(board, kwargs)
+        params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
             return params
         params['action'] = 'queue'
@@ -165,6 +166,18 @@ class AsyncCDBClient(httpx.AsyncClient):
         json = resp.json()
         #print(json)
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
+
+    async def _clear_limit(self, **kwargs) -> CDBStatus:
+        params = _prepare_params(kwargs)
+        if not isinstance(params, dict):
+            return params
+        params['action'] = 'clearlimit'
+
+        resp = await self.get(url=_CDBURL, params=params)
+
+        json = resp.json()
+        return _parse_status(json['status'], board, raisers)
+
 
     ####################################################################################################################
 
