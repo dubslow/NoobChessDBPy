@@ -172,5 +172,68 @@ class AsyncCDBLibrary(AsyncCDBClient):
             for board in bfs.iter_resume(maxply, count):
                 await send_bfs.send(board)
 
+    ####################################################################################################################
+
+    @staticmethod
+    def parse_pgn(filehandle) -> set[str]:
+        '''
+        Read one PGN file: load any and all positions found in the file into memory and deduplicate, returning a set.
+
+        The PGN parser is so tolerant to malformed data that detecting it is very difficult. Thus, malformed data may
+        cause difficult-to-trace downstream errors.
+        '''
+        print(f"reading {filehandle.name}...")
+        games = []
+        n = 0
+        while (game := chess.pgn.read_game(filehandle)) is not None:
+            games.append(game)
+            n += 1
+        print(f"read {n} games from {filehandle.name}")
+        # no real way to validate the parsed data, just assume it's good and hope for the best
+        all_positions = set() # read entire file and de-duplicate before sending queue requests
+        x = 0
+        for i, game in enumerate(games):
+            n, m = 0, 0
+            print(f"processing game {i}")
+            for node in game.all_variations():
+                parent = node.parent
+                if parent:
+                    pboard = node.parent.board() # TODO: ChildNode.board() is very, very expensive, refactor?
+                    board = pboard.copy(stack=False)
+                    board.push(node.move)
+                    #print(f"just added node {m}, reached by {pboard.san(node.move)}, now checking comment for pv...")
+                else:
+                    board = node.board()
+                    pboard = None
+                all_positions.add(board.fen())
+                n += 1
+                m += 1
+
+                if pboard:
+                    comment_pv_sans = node.parse_comment_pv_san()
+                    if comment_pv_sans:
+                        n += len(comment_pv_sans)
+                        #print(f"found comment pv at board:\n{board}\nadding {len(comment_pv_sans)} positions")
+                        # generally, the first move of pv is the same as the played move, but rarely not
+                        for fen in pboard.yield_fens_from_sans(comment_pv_sans):
+                            all_positions.add(fen)
+            print(f"in game {i} found {m} nodes, {n} positions")
+            x += n
+        unique = len(all_positions)
+        print(f"after deduplication, found {unique} unique positions from {x} total, {unique/x:.2%} unique rate")
+        return all_positions # hopefully all the other crap here is garbage-collected quickly, freeing memory
+
+    async def mass_queue(self, all_positions:set[str]):
+        pass # gotta deduplicate with query_bfs? looool
+
+    async def parse_and_queue_pgn(self, filehandle):
+        '''
+        Read one PGN file and queue for analysis any and all positions found.
+
+        Reads all positions into memory for deduplication before starting queueing: this can result in large memory
+        consumption for large files.
+        '''
+
+
 
 

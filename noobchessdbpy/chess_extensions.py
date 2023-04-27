@@ -24,31 +24,49 @@ import chess.pgn
 from typing import Iterable
 
 ########################################################################################################################
+# Manually extend chess.Board with a couple utility algorithms
 
-# Manually extend chess.Board with a utility algorithm:
-def legal_child_boards(self, stack=True) -> chess.Board:
+def legal_child_boards(self, stack=True) -> Iterable[chess.Board]:
     '''A generator over the `legal_moves` of `self`, yielding *copies* of the
     resulting boards. `stack` is the same as for `self.copy`.'''
     for move in self.legal_moves:
         new = self.copy(stack=stack)
         new.push(move)
         yield new
-chess.Board.legal_child_boards = legal_child_boards
+
+def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
+    """
+    From the given board, parse a list of SAN moves into an iterable of FEN strings.
+    """
+    board = self.copy(stack=False)
+    for san in sans:
+        board.push_san(san)
+        yield board.fen()
+
+chess.Board.legal_child_boards   = legal_child_boards
+chess.Board.yield_fens_from_sans = yield_fens_from_sans
 
 ########################################################################################################################
 # Manually add some more methods to chess.pgn.GameNode
 
-def pgn_parse_comment_pv_san(self) -> Iterable[str]:
+def parse_comment_pv_san(self) -> Iterable[str] | None:
     """
-    Parse this node's comment for comma-separated key=value fields for the 'pv' field which is a list of SAN moves
+    Parse this node's comment for comma-separated key=value fields for the 'pv' field which is a list of SAN moves.
+    In general we expect the PV to originate from this node's parent, and rarely may differ from this node's move.
+
+    Uses `cur_board` to check if the first SAN duplicates the move leading to this node, and if so, excludes that first
+    SAN.
     """
-    for f in node.comment.split(','):
+    for f in self.comment.split(','):
         f = f.strip()
         if f.startswith('pv'):
             pvfield = f
             break
-    pvstr = pvfield.split('=')[1]
-    return pvstr.split()
+    else:
+        return None
+    pvstr = pvfield.split('=', maxsplit=1)[1] # only split on first =, cause the rest are promotions lol
+    sans = pvstr.split()
+    return sans
 
 def add_line_by_san(self, sans: Iterable[str], *, comment: str = "", starting_comment: str = "", nags: Iterable[int] = []) -> chess.pgn.GameNode:
     """
@@ -74,7 +92,7 @@ def add_line_by_san(self, sans: Iterable[str], *, comment: str = "", starting_co
 
     return node
 
-def custom_add_line_san(self, sans:Iterable[str]):
+def custom_add_line_san(self, sans:Iterable[str]) -> chess.pgn.GameNode:
     """
     Creates a sequence of child nodes for the given list of SANs, using custom board control to avoid ChildNode.board()
     which is grossly expensive
@@ -89,15 +107,15 @@ def custom_add_line_san(self, sans:Iterable[str]):
 
     return node
 
-def all_variations(self):
+def all_variations(self) -> Iterable[chess.pgn.ChildNode]:
     """
-    An depth-first iterable yield `ChildNode`s from all variations starting from this node.
+    An depth-first iterable yield `ChildNode`s from all variations starting from (and including) this node.
     """
     # could accept a visitor arg etc etc
+    yield self
     for vari in self.variations:
-        yield vari
         yield from vari.all_variations()
 
-chess.pgn.GameNode.pgn_parse_comment_pv_san = pgn_parse_comment_pv_san
-chess.pgn.GameNode.custom_add_line_san      = custom_add_line_san
-chess.pgn.GameNode.all_variations           = all_variations
+chess.pgn.GameNode.parse_comment_pv_san = parse_comment_pv_san
+chess.pgn.GameNode.custom_add_line_san  = custom_add_line_san
+chess.pgn.GameNode.all_variations       = all_variations
