@@ -21,8 +21,10 @@ __all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
 This class inherits from httpx.AsyncClient, and forwards kwargs.
 API call return values are generally json or a CDBStatus value.'''
 
+import trio
 import httpx
 import chess
+
 from enum import StrEnum, auto
 from pprint import pprint
 
@@ -164,4 +166,55 @@ class AsyncCDBClient(httpx.AsyncClient):
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
             
 
+    async def mass_request(self, api_call, producer_task, *producer_args, concurrency=256, collect_results=False):
+        '''
+        Generic mass requester. Takes API call, producer task, producer args, concurrency, and whether to collect results.
+        The producer task MUST accept, and close when complete, its `send_taskqueue` trio.MemorySendChannel. Other args
+        come after `send_taskqueue`.
 
+        Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
+        '''
+        async with trio.open_nursery() as nursery:
+            # in general, we use the "tasks close their channel" pattern
+            send_taskqueue, recv_taskqueue = trio.open_memory_channel(concurrency)
+            nursery.start_soon(producer_task, send_taskqueue, *producer_args)
+
+            if collect_results:
+                results = []
+                send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+                nursery.start_soon(self._serializer, recv_serialize, results)
+                async with recv_taskqueue, send_serialize:
+                    for i in range(concurrency):
+                        nursery.start_soon(self._consumer_results, api_call, recv_taskqueue.clone(), send_serialize.clone())
+            else:
+                async with recv_taskqueue:
+                    for i in range(concurrency):
+                        nursery.start_soon(self._consumer, api_call, recv_taskqueue.clone())
+
+        if collect_results:
+            return results
+        return
+
+    @staticmethod
+    async def _consumer(api_call, recv_taskqueue:trio.MemoryReceiveChannel):
+        async with recv_taskqueue:
+            async for thing in recv_taskqueue:
+                await api_call(thing)
+
+    @staticmethod
+    async def _consumer_results(api_call, recv_taskqueue:trio.MemoryReceiveChannel,
+                                          send_serialize:trio.MemorySendChannel):
+        async with recv_taskqueue, send_serialize:
+            async for thing in recv_taskqueue:
+                await send_serialize.send(await api_call(thing))
+
+    @staticmethod
+    async def _serializer(recv_serialize, collector):
+        # in theory, we shouldn't need the collector arg, instead making our own and returning it to the nursery...
+        async with recv_serialize:
+            async for val in recv_serialize:
+                collector.append(val)
+
+
+
+        

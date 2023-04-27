@@ -97,44 +97,24 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    @staticmethod
-    async def _serializer(recv_serialize, collector):
-        # in theory, we shouldn't need the collector arg, instead making our own and returning it to the nursery...
-        async with recv_serialize:
-            async for val in recv_serialize:
-                collector.append(val)
-
-
     async def query_breadth_first(self, bfs:BreadthFirstState, concurrency=256, maxply=math.inf, count=math.inf):
-        '''Query CDB positions in breadth-first order, using the given BreadthFirstState. Returns a list of the API's
-        json output.'''
+        '''
+        Query CDB positions in breadth-first order, using the given BreadthFirstState. Returns a list of the API's
+        json output.
+        '''
         print(f"{concurrency=} {count=}")
-        async with trio.open_nursery() as nursery:
-            # in general, we use the "tasks close their channel" pattern
-            send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
-            nursery.start_soon(self._query_breadth_first_producer, send_bfs, bfs, maxply, count)
+        return await self.mass_request(self.query_all,
+                                       self._breadth_first_producer, bfs, maxply, count,
+                                       concurrency=concurrency, collect_results=True)
 
-            results = []
-            send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
-            nursery.start_soon(self._serializer, recv_serialize, results)
-
-            async with recv_bfs, send_serialize:
-                for i in range(concurrency):
-                    nursery.start_soon(self._query_breadth_first_consumer, recv_bfs.clone(), send_serialize.clone())
-
-        return results
-
-    async def _query_breadth_first_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
-                                                  send_serialize:trio.MemorySendChannel):
-        async with recv_bfs, send_serialize:
-            async for board in recv_bfs:
-                await send_serialize.send(await self.query_all(board))
-
-    async def _query_breadth_first_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
-                                                  maxply=math.inf, count=math.inf):
-        async with send_bfs:
+    @staticmethod
+    async def _breadth_first_producer(send_taskqueue:trio.MemorySendChannel,
+                                      bfs:BreadthFirstState, maxply=math.inf, count=math.inf):
+        async with send_taskqueue:
             for board in bfs.iter_resume(maxply, count):
-                await send_bfs.send(board)
+                await send_taskqueue.send(board)
+
+    ####################################################################################################################
 
     # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
     # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
