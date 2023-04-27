@@ -122,6 +122,7 @@ class AsyncCDBClient(httpx.AsyncClient):
                  }
         super().__init__(**kwargs)
 
+    ####################################################################################################################
 
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''Query all known moves for a given position
@@ -130,7 +131,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         "moves" is a list, each move has "note", "rank", "san", "score", "uci", "winrate"
             "score" is in centipawns, from side-to-move perspective
             "winrate" is ? (expected score or 1-drawrate?)
-            "rank" is similar to the notation in "Notes", 2=best, 1=good, 0=worse but may show 0 for all moves in a bad pos
+            "rank" is like the notation in "Notes", 2=best, 1=good, 0=worse but may show 0 for all moves in a bad pos
             "notes" is as on the web interface, counting child nodes and annotating the move
             "san" and "uci" describe the move itself in the respective notation
         "ply": the shortest path from the rootpos to the classical startpos
@@ -164,7 +165,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         json = resp.json()
         #print(json)
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
-            
+
+    ####################################################################################################################
 
     async def mass_request(self, api_call, producer_task, *producer_args, concurrency=256, collect_results=False):
         '''

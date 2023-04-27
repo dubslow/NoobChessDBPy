@@ -155,26 +155,44 @@ class AsyncCDBLibrary(AsyncCDBClient):
     ####################################################################################################################
 
     @staticmethod
-    def parse_pgn(filehandle) -> set[str]:
+    def parse_pgn(filehandle, start=0, count=math.inf) -> set[str]:
         '''
-        Read one PGN file: load any and all positions found in the file into memory and deduplicate, returning a set.
+        Read one PGN file: load any and all positions found in the file into memory and deduplicate, returning a set of
+        FENs. With large files, can cause large memory consumption.
 
-        The PGN parser is so tolerant to malformed data that detecting it is very difficult. Thus, malformed data may
-        cause difficult-to-trace downstream errors.
+        The PGN parser is so tolerant to malformed data that detecting it is difficult. Thus, malformed data may cause
+        difficult-to-trace downstream errors.
+
+        Skip `start` games from the file, then read no more than `count`.
         '''
         print(f"reading {filehandle.name}...")
+
+        if start > 0:
+            print(f"skipping {start} games")
+        _start = start
+        while _start > 0 and (game := chess.pgn.read_game(filehandle, Visitor=chess.pgn.SkipVisitor)) is not None:
+            _start -= 1
+            #print(f"skipped a game, {_start} to go")
+        if _start > 0:
+            print(f"still need to skip {_start} games but no more in the file")
+            return set()
+
         games = []
         n = 0
-        while (game := chess.pgn.read_game(filehandle)) is not None:
+        while n < count and (game := chess.pgn.read_game(filehandle)) is not None:
             games.append(game)
             n += 1
-        print(f"read {n} games from {filehandle.name}")
+        if n < count < math.inf:
+            print(f"read only {n} games instead of {count} from {filehandle.name}")
+        else:
+            print(f"read {n} games from {filehandle.name}")
         # no real way to validate the parsed data, just assume it's good and hope for the best
+
         all_positions = set() # read entire file and de-duplicate before sending queue requests
         x = 0
-        for i, game in enumerate(games):
+        for i, game in enumerate(games, start=start+1):
             n, m = 0, 0
-            print(f"processing game {i}")
+            #print(f"processing game {i}")
             for node in game.all_variations():
                 parent = node.parent
                 if parent:
@@ -203,17 +221,24 @@ class AsyncCDBLibrary(AsyncCDBClient):
         print(f"after deduplication, found {unique} unique positions from {x} total, {unique/x:.2%} unique rate")
         return all_positions # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
-    async def mass_queue(self, all_positions:set[str]):
-        pass # gotta deduplicate with query_bfs? looool
 
-    async def parse_and_queue_pgn(self, filehandle):
+    async def mass_queue(self, all_positions:set[str], concurrency=256):
         '''
-        Read one PGN file and queue for analysis any and all positions found.
+        Pretty much what the interface suggests. Given a collection of positions, queue them all into the DB as fast as
+        possible. Better hope you don't get rate limited lol
 
-        Reads all positions into memory for deduplication before starting queueing: this can result in large memory
-        consumption for large files.
+        Note: consumes the given set, upon return the set should be empty
         '''
+        await self.mass_request(self.queue, self._set_reader, all_positions, concurrency=256)
 
-
+    @staticmethod
+    async def _set_reader(send_taskqueue:trio.MemorySendChannel, _set):
+        n = 0
+        async with send_taskqueue:
+            while _set: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
+                await send_taskqueue.send(chess.Board(fen=_set.pop()))
+                n += 1
+                if n & 0x7FF == 0:
+                    print(f"taskqueued {n} requests")
 
 
