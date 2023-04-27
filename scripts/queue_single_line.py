@@ -32,9 +32,13 @@ logging.basicConfig(
 
 async def queue_single_line(args):
     async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
-        for arg in args:
+        print("initialized client and outer nursery")
+        for i, arg in enumerate(args):
             game = chess.pgn.read_game(StringIO(arg))
+            print(f"starting queue-tasks for line {i}...")
             nursery.start_soon(lib.queue_single_line, game)
+        #print("all lines begun...")
+    print("all queues complete")
 
 
 if __name__ == '__main__':

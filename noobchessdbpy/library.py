@@ -72,6 +72,7 @@ class BreadthFirstState:
             self.board = self.queue.popleft()
             #print(f"asdf {n=} {self.board.ply()=}, {maxply=}")
 
+########################################################################################################################
 
 class AsyncCDBLibrary(AsyncCDBClient):
     '''In general, we try to reuse a single client as much as possible, so algorithms are implemented
@@ -87,16 +88,22 @@ class AsyncCDBLibrary(AsyncCDBClient):
     async def queue_single_line(self, pgn:chess.pgn.GameNode):
         '''Given a single line of moves, `queue` for analysis all positions in this line.'''
         # chess.pgn handles variations, and silently we don't actually verify if this pgn has no variations.
+        n = 0
         async with trio.open_nursery() as nursery:
             for node in pgn.mainline():
                 nursery.start_soon(self.queue, node.board())
+                n += 1
+        print(f"completed {n} queues")
 
     async def query_reverse_single_line(self, pgn:chess.pgn.GameNode):
         '''Given a single line of moves, `query` in reverse the positions to aid backpropagation.'''
+        n = 0
         async with trio.open_nursery() as nursery:
             for node in reversed(pgn.mainline()):
                 nursery.start_soon(self.query_all, node.board())
+                n += 1
                 await trio.sleep(0.001) # this doesn't guarantee order of query, but theoretically helps
+        print(f"completed {n} queries")
 
     ####################################################################################################################
 
