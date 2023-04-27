@@ -24,22 +24,12 @@ import chess
 import chess.pgn
 import trio
 from .api import AsyncCDBClient, CDBStatus
+from . import chess_extensions
 import math
 from collections import deque
 from pprint import pprint
 
 ########################################################################################################################
-
-# Manually extend chess.Board with a utility algorithm:
-def legal_child_boards(self, stack=True) -> chess.Board:
-    '''A generator over the `legal_moves` of `self`, yielding *copies* of the
-    resulting boards. `stack` is the same as for `self.copy`.'''
-    for move in self.legal_moves:
-        new = self.copy(stack=stack)
-        new.push(move)
-        yield new
-chess.Board.legal_child_boards = legal_child_boards
-
 
 def _sanitize_int_limit(n):
     if n is None or n < 1:
