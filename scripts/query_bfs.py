@@ -15,10 +15,17 @@
 #
 #    See the LICENSE file for more details.
 
+'''
+At the moment this doesn't do much useful stuff. What it does is queries positions breadth first, returning the
+moves-results from CDB. More of a demonstration/example than independently useful, as yet.
+'''
+
 from noobchessdbpy.api import AsyncCDBClient
 from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
+
 import trio
 import chess
+
 import logging
 
 logging.basicConfig(

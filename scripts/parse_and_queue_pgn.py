@@ -15,6 +15,13 @@
 #
 #    See the LICENSE file for more details.
 
+'''
+This script reads a single PGN file, reads games into memory, finds all positions in the games, deduplicates, and does
+mass-queuing of them all. Parsing includes PVs shown in comments. Some game-skipping can be customized:
+
+args: pgnfile [start] [count] (optionally skip `start` games and process not more than `count`)
+'''
+
 from noobchessdbpy.api import AsyncCDBClient
 from noobchessdbpy.library import AsyncCDBLibrary
 
@@ -50,5 +57,5 @@ if __name__ == '__main__':
     from sys import argv
     args = argv[1:]
     if not args:
-        raise ValueError('args: filename [start] [count] (optionally skip `start` games and process not more than `count`)')
+        raise ValueError('args: pgnfile [start] [count] (optionally skip `start` games and process not more than `count`)')
     trio.run(parse_and_queue_pgn, *args)

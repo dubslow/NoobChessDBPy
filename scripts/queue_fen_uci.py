@@ -15,6 +15,17 @@
 #
 #    See the LICENSE file for more details.
 
+'''
+parses "fen ucimove ucimove ucimove" directly from cmdline args, no string quoting required
+useful for pasting ad hoc fen + ucimove inputs, e.g. your local engine output
+(e.g. position fen blah; go depth 40; info pv move move move move
+->
+this_script blah move move move move)
+
+if you already have pgn, try pasting it to queue_single_line.py
+                          or reading it from file with parse_and_queue_pgn.py
+'''
+
 from noobchessdbpy.library import AsyncCDBLibrary
 
 import trio
@@ -31,11 +42,9 @@ logging.basicConfig(
 
 def parse_fen_uci(args) -> list[chess.Board]:
     '''
-    parses "fen [moves] uci moves" directly from cmdline args (word 'moves' is optional)
+    parses "fen ['moves'] ucimove ucimove ucimove" directly from cmdline args (word 'moves' is optional)
     returns list of boards to queue
     useful for pasting engine pv output directly into a queue command
-    (e.g. position fen blah; go depth 40; info pv move move move move
-    this_script blah move move move move)
     '''
     fen = ' '.join(args[:6])
     args = args[6:]

@@ -15,11 +15,24 @@
 #
 #    See the LICENSE file for more details.
 
+'''
+This script is a bit misleadingly named. It reads PGN directly from command line as a single argument, which can be
+pasted as such by using bash's multiline string quoting $' ' (see e.g. https://stackoverflow.com/a/25941527/1497645)
+
+In fact you can paste as many pgn-quoted-into-single-arguments as you like, and this script will queue the mainline
+of each such PGN in parallel.
+
+This is useful for e.g. pasting TCEC PVs (from players or kibitzers) for queueing. One can paste the game pgn,
+two players pgn and two kibitzers pgn, for a total of 5 arguments to this script, which will all be queued in parallel.
+'''
+
 from noobchessdbpy.api import AsyncCDBClient
 from noobchessdbpy.library import AsyncCDBLibrary
+
 import trio
 import chess
 import chess.pgn
+
 from io import StringIO
 import logging
 

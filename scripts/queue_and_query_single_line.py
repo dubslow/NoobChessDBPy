@@ -15,11 +15,17 @@
 #
 #    See the LICENSE file for more details.
 
+'''
+Usage like queue_single_line.py except also queries the lines after queuing them. Mostly useless.
+'''
+
 from noobchessdbpy.api import AsyncCDBClient
 from noobchessdbpy.library import AsyncCDBLibrary
+
 import trio
 import chess
 import chess.pgn
+
 from io import StringIO
 import logging
 
