@@ -48,6 +48,7 @@ class CDBStatus(StrEnum):
     NoBestMove    = "nobestmove"
     TrivialBoard  = ""
     LimitExceeded = "rate limit exceeded"
+    LimitCleared  = "rate limit cleared"
 
 class CDBError(Exception):
     pass
@@ -176,7 +177,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         resp = await self.get(url=_CDBURL, params=params)
 
         json = resp.json()
-        return _parse_status(json['status'], board, raisers)
+        return _parse_status(json['status'])
 
 
     ####################################################################################################################
