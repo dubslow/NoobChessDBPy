@@ -3,8 +3,15 @@ A currently-skeletal python interface to CDB using async+trio.
 CDB is this: https://www.chessdb.cn/queryc_en/ altho it goes by so many names that the package name is longer for
 unambiguity. Nevertheless in context it shall simply be called CDB.
 
-See `scripts/` for basic usage examples, together with `help()` on the imports
-demonstrated therein.
+The two basic actions on CDB are "query" and "queue". A query is a read-op, requesting information, moves, scores, on
+a given position, whatever the db already knows. A queue is a write-op, requesting for the CDB backend to store a given
+position, and run some initial analysis for storage. (Queueing already-known positions results in the backend refreshing
+child nodes, re-backprogating new scores and other info.)
+
+See `scripts/` and docstrings therein for basic usage examples, together with `help()` on the imports demonstrated therein.
+For queries, a basic "query args" script is given, as well as slightly fancier "mass query breadth first" type stuff.
+For queues, there's several basic examples of pasting various formats into commandline args in various ways, or reading
+positions from PGN files for mass queuing.
 
 No promises of utility. Feedback welcome, via this repo or Stockfish Discord.
 
