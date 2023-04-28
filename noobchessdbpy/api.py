@@ -34,12 +34,12 @@ class CDBStatus(StrEnum):
     '''Enum used for non-moves return values from CDB.
     
     Ok = query served
-    Success = request for analysis accepted
-    GameOver includes checkmate, stalemate, threefold, 50 move, etc
+    Success = normal request and response
+    GameOver includes checkmate, stalemate
     UnknownBoard = position not in DB (but maybe now added)
     NoBestMove = position exists, but nevertheless no moves
     TrivialBoard = request for analysis was ignored because trivial position
-    LimitExceeded = too many requests from this client/ip/whatever
+    LimitExceeded = too many requests from this ipaddr
     '''
     Success       = "ok"
     GameOver      = auto()
@@ -130,7 +130,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''Query all known moves for a given position
 
         Query retval is json with keys "moves", "ply", "status"
-        "moves" is a list, each move has "note", "rank", "san", "score", "uci", "winrate"
+        "moves" is a list, sorted by score, each move has "note", "rank", "san", "score", "uci", "winrate"
             "score" is in centipawns, from side-to-move perspective
             "winrate" is ? (expected score or 1-drawrate?)
             "rank" is like the notation in "Notes", 2=best, 1=good, 0=worse but may show 0 for all moves in a bad pos
@@ -138,6 +138,8 @@ class AsyncCDBClient(httpx.AsyncClient):
             "san" and "uci" describe the move itself in the respective notation
         "ply": the shortest path from the rootpos to the classical startpos
         "status": see CDBStatus
+
+        returns a CDBStatus if the json status isn't CDBStatus.Success or CDBStatus.UnknownBoard
         '''
         params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
@@ -189,6 +191,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         come after `send_taskqueue`.
 
         Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
+
+        If collecting results, they're tuples of `(producer_arg, api_call(producer_arg))`.
         '''
         async with trio.open_nursery() as nursery:
             # in general, we use the "tasks close their channel" pattern
@@ -222,7 +226,8 @@ class AsyncCDBClient(httpx.AsyncClient):
                                           send_serialize:trio.MemorySendChannel):
         async with recv_taskqueue, send_serialize:
             async for thing in recv_taskqueue:
-                await send_serialize.send(await api_call(thing))
+                result = (thing, await api_call(thing))
+                await send_serialize.send(result)
 
     @staticmethod
     async def _serializer(recv_serialize, collector):

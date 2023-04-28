@@ -38,22 +38,25 @@ def _sanitize_int_limit(n):
 ########################################################################################################################
 
 class BreadthFirstState:
-    '''Recursively iterate over the `board`'s legal moves, excluding the `board` itself,
-    subject to ply <= `maxply` (min 1). Order of moves in a given position is arbitrary,
-    whatever `chess.Board` does. `maxply` compares directly against `rootpos.ply()`.'''
+    '''
+    Recursively iterate over the `board`'s legal moves, excluding the `board` itself, subject to ply <= `maxply` (min 1).
+    Order of moves in a given position is arbitrary, whatever `chess.Board` does. `maxply` compares directly against
+    `rootpos.ply()`.
+
+    `__init__` arg is the base position; state is remembered between each `iter_resume` call.
+    '''
     def __init__(self, rootpos:chess.Board):
         self.rootpos = rootpos
         self.board = rootpos.copy(stack=False)
         self.queue = deque(self.board.legal_child_boards())
 
     def iter_resume(self, maxply=math.inf, count=math.inf):
-        # _copystack=False disables maxply in exchange for speed
         _sanitize_int_limit(maxply)
         _sanitize_int_limit(count)
         n = 0
 
         self.board = self.queue.popleft() # still need a do...while syntax!
-        print(f"ASDF {self.board.ply()=}, {maxply=}")
+        print(f"starting bfs iter at {self.board.ply()=} with {count=} {maxply=}")
         while self.board.ply() <= maxply and n < count:
             n += 1
             yield self.board
@@ -97,12 +100,11 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def query_breadth_first(self, bfs:BreadthFirstState, concurrency=256, maxply=math.inf, count=math.inf):
+    async def query_breadth_first(self, bfs:BreadthFirstState, maxply=math.inf, count=math.inf, concurrency=256):
         '''
         Query CDB positions in breadth-first order, using the given BreadthFirstState. Returns a list of the API's
         json output.
         '''
-        print(f"{concurrency=} {count=}")
         return await self.mass_request(self.query_all,
                                        self._breadth_first_producer, bfs, maxply, count,
                                        concurrency=concurrency, collect_results=True)
@@ -116,10 +118,33 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
+    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, chunksize=2048, concurrency=256):
+        '''
+        Given a `predicate`, which is a function on (chess.Board, CDB's json data for that board) returning a bool,
+        search for `filter_count` positions which pass the filter, using mass queries of size `chunksize`. Returns a list
+        of such positions found.
+        '''
+        # TODO: could yield each chunk's results as it goes, to enable writing to file in between each chunk, which
+        # allow interuppting a too-long search
+        found = []
+        bfs = BreadthFirstState(pos)
+        print(f"starting bfs filter search for {filter_count} positions, {chunksize=}")
+        n = 0
+        while len(found) < filter_count:
+            print(f"found {len(found)} from {n} queries, querying next chunk...")
+            results = await self.query_breadth_first(bfs, count=chunksize, concurrency=concurrency)
+            for board, response in results:
+                if not isinstance(response, CDBStatus) and predicate(board, response):
+                    found.append((board, response))
+            n += chunksize
+        return found
+
+    ####################################################################################################################
+
     # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
     # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
     # enables more accurate estimation (and less overshoot) of queries needed to reach `filtercount` positions.
-    async def query_breadth_first_filter(self, bfs:BreadthFirstState, filter, filtercount, concurrency=256):
+    async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount, concurrency=256):
         print(f"{concurrency=} {count=}")
         async with trio.open_nursery() as nursery:
             nursery.done = trio.Event()
@@ -127,16 +152,17 @@ class AsyncCDBLibrary(AsyncCDBClient):
             nursery.count = trio.Sempahore()  # release = increment lol
 
             # in general, we use the "tasks close their channel" pattern
-            send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
-            nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
+            #send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
+            #nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
 
             results = []
-            send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
-            nursery.start_soon(self._serializer, recv_serialize, results)
+            #send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+            #nursery.start_soon(self._serializer, recv_serialize, results)
 
-            async with recv_bfs, send_serialize:
-                for i in range(concurrency):
-                    nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
+            #async with recv_bfs, send_serialize:
+            #    for i in range(concurrency):
+                    #nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
+
 
         return results
 
