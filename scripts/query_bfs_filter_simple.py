@@ -43,7 +43,7 @@ from sys import argv
 OUT_FILE  = argv[0].replace('.py', '.txt')
 BASEPOS   = chess.Board() # classical startpos, can also put FEN here
 TARGET    = 200
-CHUNKSIZE = 1024 # should be a multiple of concurrency, which defaults to a small power of 2
+CHUNKSIZE = 1024 # should be a multiple of concurrency, which defaults to a small(ish) power of 2
 
 def predicate(board:chess.Board, cdb_json):
     '''Given a CDB json response for a position, filter for well-biased positions'''
@@ -59,7 +59,7 @@ def predicate(board:chess.Board, cdb_json):
 
 
 async def query_bfs_filter_simple():
-    async with AsyncCDBLibrary() as lib:
+    async with AsyncCDBLibrary() as lib: # alter the concurrency by kwarg here, if desired (default fastest on author system)
         filtered_poss = await lib.query_bfs_filter_simple(BASEPOS, predicate, TARGET, chunksize=CHUNKSIZE)
     print(f"writing to {OUT_FILE}...")
     with open(OUT_FILE, 'w') as handle:

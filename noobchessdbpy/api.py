@@ -92,7 +92,7 @@ def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
 #        "notes" is as on the web interface, counting child nodes and annotating the move
 # ply: the shortest path from the rootpos to the classical startpos
 
-# current testing indicates max rate of 450 req/s, with no added rate above concurrency=128
+# current testing indicates max rate of ~500 req/s, with no added rate above concurrency=256
 # currently unknown what is the bottleneck
 
 class AsyncCDBClient(httpx.AsyncClient):
@@ -106,11 +106,22 @@ class AsyncCDBClient(httpx.AsyncClient):
         endgame = show only TB data
     
     `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
+
+    `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to 256.
     '''
 
     # TODO: http2?
     def __init__(self, **_kwargs):
-        '''This httpx.AsyncClient subclass may be initialized with any kwargs of the parent.'''
+        '''
+        This httpx.AsyncClient subclass may be initialized with any kwargs of the parent.
+        Also, `self.concurrency` may be set here.
+        '''
+        if 'concurrency' in _kwargs:
+            self.concurrency = _kwargs['concurrency']
+            del _kwargs['concurrency']
+        else:
+            self.concurrency = 256
+
         kwargs = {
                   #'base_url': _CDBURL,
                   'headers': {'user-agent': 'noobchessdbpy'},
@@ -184,9 +195,9 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
-    async def mass_request(self, api_call, producer_task, *producer_args, concurrency=256, collect_results=False):
+    async def mass_request(self, api_call, producer_task, *producer_args, collect_results=False):
         '''
-        Generic mass requester. Takes API call, producer task, producer args, concurrency, and whether to collect results.
+        Generic mass requester. Takes API call, producer task, producer args, and whether to collect results.
         The producer task MUST accept, and close when complete, its `send_taskqueue` trio.MemorySendChannel. Other args
         come after `send_taskqueue`.
 
@@ -196,19 +207,19 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         async with trio.open_nursery() as nursery:
             # in general, we use the "tasks close their channel" pattern
-            send_taskqueue, recv_taskqueue = trio.open_memory_channel(concurrency)
+            send_taskqueue, recv_taskqueue = trio.open_memory_channel(self.concurrency)
             nursery.start_soon(producer_task, send_taskqueue, *producer_args)
 
             if collect_results:
                 results = []
-                send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+                send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
                 nursery.start_soon(self._serializer, recv_serialize, results)
                 async with recv_taskqueue, send_serialize:
-                    for i in range(concurrency):
+                    for i in range(self.concurrency):
                         nursery.start_soon(self._consumer_results, api_call, recv_taskqueue.clone(), send_serialize.clone())
             else:
                 async with recv_taskqueue:
-                    for i in range(concurrency):
+                    for i in range(self.concurrency):
                         nursery.start_soon(self._consumer, api_call, recv_taskqueue.clone())
 
         if collect_results:

@@ -100,14 +100,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def query_breadth_first(self, bfs:BreadthFirstState, maxply=math.inf, count=math.inf, concurrency=256):
+    async def query_breadth_first(self, bfs:BreadthFirstState, maxply=math.inf, count=math.inf):
         '''
         Query CDB positions in breadth-first order, using the given BreadthFirstState. Returns a list of the API's
         json output.
         '''
         return await self.mass_request(self.query_all,
                                        self._breadth_first_producer, bfs, maxply, count,
-                                       concurrency=concurrency, collect_results=True)
+                                       collect_results=True)
 
     @staticmethod
     async def _breadth_first_producer(send_taskqueue:trio.MemorySendChannel,
@@ -118,7 +118,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, chunksize=2048, concurrency=256):
+    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, chunksize=2048):
         '''
         Given a `predicate`, which is a function on (chess.Board, CDB's json data for that board) returning a bool,
         search for `filter_count` positions which pass the filter, using mass queries of size `chunksize`. Returns a list
@@ -132,7 +132,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         n = 0
         while len(found) < filter_count:
             print(f"found {len(found)} from {n} queries, querying next chunk...")
-            results = await self.query_breadth_first(bfs, count=chunksize, concurrency=concurrency)
+            results = await self.query_breadth_first(bfs, count=chunksize)
             for board, response in results:
                 if not isinstance(response, CDBStatus) and predicate(board, response):
                     found.append((board, response))
@@ -145,23 +145,23 @@ class AsyncCDBLibrary(AsyncCDBClient):
     # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
     # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
     # enables more accurate estimation (and less overshoot) of queries needed to reach `filtercount` positions.
-    async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount, concurrency=256):
-        print(f"{concurrency=} {count=}")
+    async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount):
+        print(f"{self.concurrency=} {count=}")
         async with trio.open_nursery() as nursery:
             nursery.done = trio.Event()
             # hack: we use this as a counter, without having to separately store a lock and variable
             nursery.count = trio.Sempahore()  # release = increment lol
 
             # in general, we use the "tasks close their channel" pattern
-            #send_bfs, recv_bfs = trio.open_memory_channel(concurrency)
+            #send_bfs, recv_bfs = trio.open_memory_channel(self.concurrency)
             #nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
 
             results = []
-            #send_serialize, recv_serialize = trio.open_memory_channel(concurrency)
+            #send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
             #nursery.start_soon(self._serializer, recv_serialize, results)
 
             #async with recv_bfs, send_serialize:
-            #    for i in range(concurrency):
+            #    for i in range(self.concurrency):
                     #nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
 
 
@@ -249,14 +249,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
         return all_positions # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
 
-    async def mass_queue(self, all_positions:set[str], concurrency=256):
+    async def mass_queue(self, all_positions:set[str]):
         '''
         Pretty much what the interface suggests. Given a collection of positions, queue them all into the DB as fast as
         possible. Better hope you don't get rate limited lol
 
         Note: consumes the given set, upon return the set should be empty
         '''
-        await self.mass_request(self.queue, self._set_reader, all_positions, concurrency=256)
+        await self.mass_request(self.queue, self._set_reader, all_positions)
 
     @staticmethod
     async def _set_reader(send_taskqueue:trio.MemorySendChannel, _set):
