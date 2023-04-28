@@ -43,25 +43,31 @@ from sys import argv
 OUT_FILE  = argv[0].replace('.py', '.txt')
 BASEPOS   = chess.Board() # classical startpos, can also put FEN here
 TARGET    = 200
-CHUNKSIZE = 1024
+CHUNKSIZE = 1024 # should be a multiple of concurrency, which defaults to a small power of 2
 
 def predicate(board:chess.Board, cdb_json):
     '''Given a CDB json response for a position, filter for well-biased positions'''
     # Refer to AsyncCDBClient.query_all docstring for a quick format reference.
     # Note that we don't actually use the `board` arg here, but ofc some may find use for it
     moves = cdb_json['moves']
-    top_move = moves[0]
-    cp_score = top_move['score']
-    return 90 <= abs(cp_score) <= 112
+    if len(moves) <= 1: return False
+    t1, t2 = moves[0:2]
+    if 'x' in t1['san'] or 'x' in t2['san']: return False
+    cp1, cp2 = t1['score'], t2['score']
+    return 90 <= abs(cp1) <= 112 and 90 <= abs(cp2) <= 112
     # one might also consider cdb's "winrate" thingy, 35 <= winrate <= 65 or smth
 
 
 async def query_bfs_filter_simple():
     async with AsyncCDBLibrary() as lib:
         filtered_poss = await lib.query_bfs_filter_simple(BASEPOS, predicate, TARGET, chunksize=CHUNKSIZE)
-    print(f"now have {len(filtered_poss)} positions, writing to {OUT_FILE}...")
+    print(f"writing to {OUT_FILE}...")
     with open(OUT_FILE, 'w') as handle:
-        handle.write('\n'.join(f"{json['moves'][0]['score']} {board.fen()}" for board, json in filtered_poss) + '\n')
+        handle.write('\n'.join(
+                               f"{json['moves'][0]['score']} {json['moves'][1]['score']} {board.fen()}"
+                               for board, json in filtered_poss
+                              )
+                     + '\n')
     print("complete")
 
 if __name__ == '__main__':

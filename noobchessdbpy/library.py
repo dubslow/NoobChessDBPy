@@ -137,6 +137,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 if not isinstance(response, CDBStatus) and predicate(board, response):
                     found.append((board, response))
             n += chunksize
+        print(f"after {n} queries, found {len(found)} positions passing the predicate")
         return found
 
     ####################################################################################################################
