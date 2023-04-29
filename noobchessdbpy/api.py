@@ -54,10 +54,10 @@ class CDBError(Exception):
     pass
 
 
-_known_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
+_known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     for kw in kwargs:
-        if kw not in _known_kwargs:
+        if kw not in _known_cdb_kwargs:
             raise CDBError(f"unknown api argument: {kw}")
     kwargs['json']  = 1
     if board:
@@ -95,10 +95,12 @@ def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
 # current testing indicates max rate of ~400-500 req/s, with no added rate above concurrency=256
 # currently unknown what is the bottleneck. maybe chess.Board.fen?
 
+
 class AsyncCDBClient(httpx.AsyncClient):
-    '''Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
+    '''
+    Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
     
-    All queries require a chess.Board arugment, and optionally accept a subset
+    All queries require a chess.Board arugment, and optionally accept some subset
     of the following standard options: `showall`, `learn`, `egtbmetric`, `endgame`
     all 1 or 0 except egtbmetric, which is "dtm" or "dtz"
         showall = include unknown moves
@@ -108,29 +110,36 @@ class AsyncCDBClient(httpx.AsyncClient):
     `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
 
     `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to 128.
+    `self.user` is the User-Agent attached to http requests, and can only be set via the constructor.
     '''
+    _known_client_kwargs = {"concurrency": 128, "user": ""}
+    def _process_kwargs(self, kwargs):
+        # Set our kwargs on self, then delete them, and the rest get passed to super()
+        for key, defaultval in self._known_client_kwargs.items():
+            if key in kwargs:
+                setattr(self, key, kwargs[key])
+                del kwargs[key]
+            else:
+                setattr(self, key, defaultval)
 
     # TODO: http2?
     def __init__(self, **_kwargs):
         '''
         This httpx.AsyncClient subclass may be initialized with any kwargs of the parent.
-        Also, `self.concurrency` may be set here.
+        Also, `self.concurrency` and `self.user` can be set here.
         '''
-        if 'concurrency' in _kwargs:
-            self.concurrency = _kwargs['concurrency']
-            del _kwargs['concurrency']
-        else:
-            self.concurrency = 128
-
+        # take our kwargs, and delete them from the dict
+        self._process_kwargs(_kwargs)
+        # _kwargs is now only those meant for super(), and we set some defaults too before forwarding
         kwargs = {
                   #'base_url': _CDBURL,
-                  'headers': {'user-agent': 'noobchessdbpy'},
-                  'timeout': 30,
-                  'limits': httpx.Limits(max_keepalive_connections=None,
+                  'headers':   {'user-agent': self.user + '/noobchessdbpy'},
+                  'timeout':   30,
+                  'limits':    httpx.Limits(max_keepalive_connections=None,
                                          max_connections=None,
                                          keepalive_expiry=30
                                         ),
-                  #'http2': True,
+                  #'http2':    True,
                   **_kwargs
                  }
         super().__init__(**kwargs)
