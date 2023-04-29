@@ -37,7 +37,7 @@ logging.basicConfig(
 
 async def query_bfs():
     rootpos = chess.Board()
-    count, concurrency = 4096, 256
+    count, concurrency = 4096, 128
     print(f"{count=} {concurrency=}")
     async with AsyncCDBLibrary(concurrency=concurrency) as lib:
         results = await lib.query_breadth_first(BreadthFirstState(rootpos), count=count)

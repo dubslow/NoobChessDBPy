@@ -92,8 +92,8 @@ def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
 #        "notes" is as on the web interface, counting child nodes and annotating the move
 # ply: the shortest path from the rootpos to the classical startpos
 
-# current testing indicates max rate of ~500 req/s, with no added rate above concurrency=256
-# currently unknown what is the bottleneck
+# current testing indicates max rate of ~400-500 req/s, with no added rate above concurrency=256
+# currently unknown what is the bottleneck. maybe chess.Board.fen?
 
 class AsyncCDBClient(httpx.AsyncClient):
     '''Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
@@ -107,7 +107,7 @@ class AsyncCDBClient(httpx.AsyncClient):
     
     `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
 
-    `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to 256.
+    `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to 128.
     '''
 
     # TODO: http2?
@@ -120,7 +120,7 @@ class AsyncCDBClient(httpx.AsyncClient):
             self.concurrency = _kwargs['concurrency']
             del _kwargs['concurrency']
         else:
-            self.concurrency = 256
+            self.concurrency = 128
 
         kwargs = {
                   #'base_url': _CDBURL,
