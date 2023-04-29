@@ -23,11 +23,14 @@ Arguments may be either `chess` objects or strings, altho work TBD to handle str
 import chess
 import chess.pgn
 import trio
+
 from .api import AsyncCDBClient, CDBStatus
 from . import chess_extensions
+
 import math
 from collections import deque
 from pprint import pprint
+from typing import Iterable
 
 ########################################################################################################################
 
@@ -108,6 +111,23 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 n += 1
                 await trio.sleep(0.001) # this doesn't guarantee order of query, but theoretically helps
         print(f"completed {n} queries")
+
+    ####################################################################################################################
+
+    async def query_fens(self, fens:Iterable[str]):
+        '''
+        Very basic: given a container of FENs, query them all and return the CDB results. Can be used for arbitrarily
+        large containers, so long as you don't hit the rate limit.
+        '''
+        # Note: for containers of size less than the concurrency, this can be quite wasteful. Alas, nurseries not returning
+        # retvals by default makes it tougher...
+        return await self.mass_request(self.query_all, self._query_fen_producer, fens, collect_results=True)
+
+    @staticmethod
+    async def _query_fen_producer(send_taskqueue:trio.MemorySendChannel, fens:Iterable[str]):
+        async with send_taskqueue:
+            for fen in fens:
+                await send_taskqueue.send(chess.Board(fen))
 
     ####################################################################################################################
 
