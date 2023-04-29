@@ -47,33 +47,34 @@ class BreadthFirstState:
     '''
     def __init__(self, rootpos:chess.Board):
         self.rootpos = rootpos
-        self.board = rootpos.copy(stack=False)
-        self.queue = deque(self.board.legal_child_boards())
+        self.queue = deque(rootpos.legal_child_fens())
         self.seen = set()
         self.n = self.d = 0
         # if we've yielded `n` positions, and our tree has branching factor `b`, then on average the memory use is about
-        # sizeof(chess.Board) * n * b for the queue (b ~ 35-40, so this is a lot)
-        # sizeof(fenstr) * n for the filtering set
+        # queue: sizeof(chess.Board) * n * b (b ~ 35-40, so this is a lot)
+        #  seen: sizeof(fenstr) * n
+        self.fen = self.queue.popleft()
+        self.board = chess.Board(self.fen)
 
     def iter_resume(self, maxply=math.inf, count=math.inf):
         _sanitize_int_limit(maxply)
         _sanitize_int_limit(count)
         n = 0
 
-        self.board = self.queue.popleft() # still need a do...while syntax!
         print(f"starting bfs iter at {self.board.ply()=} with {count=} {maxply=}")
         while self.board.ply() <= maxply and n < count:
-            if (fen := self.board.fen()) not in self.seen:
+            if self.fen not in self.seen:
                 n += 1; self.n += 1
                 # In unlimited mode, the queue is on average "fucking big"
-                # surprisingly, pre-filtering for duplicates here doesn't do anything
-                self.queue.extend(self.board.legal_child_boards(stack=False))
+                # surprisingly (to me at least), pre-filtering for duplicates here doesn't do much of anything
+                self.queue.extend(self.board.legal_child_fens(stack=False))
                 if self.n & 0x7FF == 0: print(f"bfs: {self.board.ply()=} {self.n=} {self.d=} {self.d/self.n=:.2%}")
-                self.seen.add(fen)
+                self.seen.add(self.fen)
                 yield self.board
             else:
                 self.d += 1
-            self.board = self.queue.popleft()
+            self.fen = self.queue.popleft()
+            self.board = chess.Board(self.fen)
 
 ########################################################################################################################
 

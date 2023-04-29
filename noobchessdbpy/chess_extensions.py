@@ -26,13 +26,14 @@ from typing import Iterable
 ########################################################################################################################
 # Manually extend chess.Board with a couple utility algorithms
 
-def legal_child_boards(self, stack=True) -> Iterable[chess.Board]:
-    '''A generator over the `legal_moves` of `self`, yielding *copies* of the
-    resulting boards. `stack` is the same as for `self.copy`.'''
+# TODO: apparently chess.Board.fen() is considerably expensive cpu-wise, altho the fenstr takes nearly 9x less memory...
+def legal_child_fens(self, stack=True) -> Iterable[chess.Board]:
+    '''A generator over the `legal_moves` of `self`, yielding resulting fens.
+    `stack` is the same as for `self.copy`.'''
     for move in self.legal_moves:
         new = self.copy(stack=stack)
         new.push(move)
-        yield new
+        yield new.fen()
 
 def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
     """
@@ -43,7 +44,7 @@ def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
         board.push_san(san)
         yield board.fen()
 
-chess.Board.legal_child_boards   = legal_child_boards
+chess.Board.legal_child_fens   = legal_child_fens
 chess.Board.yield_fens_from_sans = yield_fens_from_sans
 
 ########################################################################################################################
