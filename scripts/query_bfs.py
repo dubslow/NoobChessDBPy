@@ -59,7 +59,8 @@ async def query_bfs(rootpos:str=None, maxply=math.inf, count=math.inf, outfile=N
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='''Query positions in breadth first order, optionally writing to file.
+                                                  One of the limits is required, see below.''')
 
     limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
     limits.add_argument('-l', '--count', '--limit-count', type=int, help='the maximum number of positions to query')
