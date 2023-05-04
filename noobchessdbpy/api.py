@@ -31,7 +31,8 @@ from pprint import pprint
 _CDBURL = 'https://www.chessdb.cn/cdb.php'
 
 class CDBStatus(StrEnum):
-    '''Enum used for non-moves return values from CDB.
+    '''
+    Enum used for non-moves return values from CDB.
     
     Ok = query served
     Success = normal request and response
@@ -69,7 +70,7 @@ def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
 
 def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
     if raisers is None:
-        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard}
+        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard, CDBStatus.NoBestMove}
     try:
         status = CDBStatus(text)
     except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
@@ -114,7 +115,7 @@ class AsyncCDBClient(httpx.AsyncClient):
     '''
     _known_client_kwargs = {"concurrency": 128, "user": ""}
     def _process_kwargs(self, kwargs):
-        # Set our kwargs on self, then delete them, and the rest get passed to super()
+        # Set our kwargs on self, then delete them, and the rest are forwarded to super()
         for key, defaultval in self._known_client_kwargs.items():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
@@ -133,7 +134,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         # _kwargs is now only those meant for super(), and we set some defaults too before forwarding
         kwargs = {
                   #'base_url': _CDBURL,
-                  'headers':   {'user-agent': self.user + '/noobchessdbpy'},
+                  'headers':   {'user-agent': self.user + bool(self.user) * '/' + 'noobchessdbpy'},
                   'timeout':   30,
                   'limits':    httpx.Limits(max_keepalive_connections=None,
                                          max_connections=None,
@@ -147,7 +148,8 @@ class AsyncCDBClient(httpx.AsyncClient):
     ####################################################################################################################
 
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
-        '''Query all known moves for a given position
+        '''
+        Query all known moves for a given position
 
         Query retval is json with keys "moves", "ply", "status"
         "moves" is a list, sorted by score, each move has "note", "rank", "san", "score", "uci", "winrate"
@@ -159,7 +161,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         "ply": the shortest path from the rootpos to the classical startpos
         "status": see CDBStatus
 
-        returns a CDBStatus if the json status isn't CDBStatus.Success or CDBStatus.UnknownBoard
+        returns a CDBStatus if the json status isn't CDBStatus.Success
         '''
         params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
