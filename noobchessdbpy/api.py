@@ -55,6 +55,7 @@ class CDBError(Exception):
     pass
 
 
+# Maybe these helper funcs should be static methods on the Client below?
 _known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     for kw in kwargs:
@@ -66,7 +67,6 @@ def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
             return CDBStatus.GameOver
         kwargs['board'] = board.fen()
     return kwargs
-
 
 def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
     if raisers is None:
@@ -93,8 +93,8 @@ def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
 #        "notes" is as on the web interface, counting child nodes and annotating the move
 # ply: the shortest path from the rootpos to the classical startpos
 
-# current testing indicates max rate of ~400-500 req/s, with no added rate above concurrency=256
-# currently unknown what is the bottleneck. maybe chess.Board.fen?
+# current testing indicates max rate of ~400-500 req/s, with no added rate above concurrency=256, on my cpu at least
+# currently unknown what is the bottleneck. maybe chess.Board.fen()?
 
 
 class AsyncCDBClient(httpx.AsyncClient):
@@ -110,10 +110,11 @@ class AsyncCDBClient(httpx.AsyncClient):
     
     `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
 
-    `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to 128.
+    `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to DefaultConcurrency.
     `self.user` is the User-Agent attached to http requests, and can only be set via the constructor.
     '''
-    _known_client_kwargs = {"concurrency": 128, "user": ""}
+    DefaultConcurrency = 128
+    _known_client_kwargs = {"concurrency": DefaultConcurrency, "user": ""}
     def _process_kwargs(self, kwargs):
         # Set our kwargs on self, then delete them, and the rest are forwarded to super()
         for key, defaultval in self._known_client_kwargs.items():
@@ -214,7 +215,8 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
 
-        If collecting results, they're tuples of `(producer_arg, api_call(producer_arg))`.
+        If collecting results, they're tuples of `(producer_arg, api_call(producer_arg))`. The caller can easily convert
+        this to a dict if the arg is hashable.
         '''
         async with trio.open_nursery() as nursery:
             # in general, we use the "tasks close their channel" pattern
