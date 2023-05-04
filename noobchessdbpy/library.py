@@ -49,13 +49,15 @@ class BreadthFirstState:
     `__init__` arg is the base position; state is remembered between each `iter_resume` call.
     '''
     def __init__(self, rootpos:chess.Board):
-        self.rootpos = rootpos
+        self.rootpos = rootpos.copy()
+        self.rootply = self.rootpos.ply()
+
         self.queue = deque(rootpos.legal_child_fens())
         self.seen = set()
         self.n = self.d = 0
         # if we've yielded `n` positions, and our tree has branching factor `b`, then on average the memory use is about
-        # queue: sizeof(chess.Board) * n * b (b ~ 35-40, so this is a lot)
-        #  seen: sizeof(fenstr) * n
+        # `queue`: sizeof(chess.Board) * n * b (b ~ 35-40, so this is a lot)
+        #  `seen`: sizeof(fenstr) * n
         self.fen = self.queue.popleft()
         self.board = chess.Board(self.fen)
 
@@ -64,20 +66,21 @@ class BreadthFirstState:
         _sanitize_int_limit(count)
         n = 0
 
-        print(f"starting bfs iter at {self.board.ply()=} with {count=} {maxply=}")
-        while self.board.ply() <= maxply and n < count:
+        print(f"starting bfs iter at relative ply {self.board.ply() - self.rootply} with {count=} {maxply=}")
+        while n < count and (self.board.ply() - self.rootply) <= maxply:
             if self.fen not in self.seen:
                 n += 1; self.n += 1
                 # In unlimited mode, the queue is on average "fucking big"
                 # surprisingly (to me at least), pre-filtering for duplicates here doesn't do much of anything
                 self.queue.extend(self.board.legal_child_fens(stack=False))
-                if self.n & 0x7FF == 0: print(f"bfs: {self.board.ply()=} {self.n=} {self.d=} {self.d/self.n=:.2%}")
+                if self.n & 0x7FF == 0: print(f"bfs: relative ply {self.board.ply() - self.rootply} {self.n=} {self.d=} {self.d/self.n=:.2%}")
                 self.seen.add(self.fen)
                 yield self.board
             else:
                 self.d += 1
             self.fen = self.queue.popleft()
             self.board = chess.Board(self.fen)
+        print(f"finished bfs iter at {n=}, relative ply {self.board.ply() - self.rootply}")
 
 ########################################################################################################################
 
