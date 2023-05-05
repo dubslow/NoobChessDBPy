@@ -38,13 +38,8 @@ logging.basicConfig(
 
 ########################################################################################################################
 
-async def query_bfs(rootpos:str=None, maxply=math.inf, count=math.inf, outfile=None, concurrency=AsyncCDBClient.DefaultConcurrency):
-    if rootpos is None:
-        rootpos = chess.Board()
-    else:
-        rootpos = chess.Board(rootpos)
-
-    print(f"{maxply = }, {count = }, {concurrency = }")
+async def query_bfs(rootpos, maxply=math.inf, count=math.inf, outfile=None, concurrency=AsyncCDBClient.DefaultConcurrency):
+    print(f"{maxply=}, {count=}, {concurrency=}")
     async with AsyncCDBLibrary(concurrency=concurrency, user='Dubslow') as lib:
         results = await lib.query_breadth_first(BreadthFirstState(rootpos), maxply=maxply, count=count)
     #results = {b.fen(): j for b, j in results}
@@ -60,17 +55,17 @@ async def query_bfs(rootpos:str=None, maxply=math.inf, count=math.inf, outfile=N
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''Query positions in breadth first order, optionally writing to file.
-                                                  One of the limits is required, see below.''')
+                                                 One of the limits is required, see below.''')
 
     limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
     limits.add_argument('-l', '--count', '--limit-count', type=int, help='the maximum number of positions to query')
     limits.add_argument('-p', '--ply', '--limit-ply', type=int, help='the max ply from the root to query')
     limits.add_argument('-i', '--infinite', action='store_true', help='unlimited querying')
 
-    parser.add_argument('-f', '--fen',
+    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
                 help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                         help="maximum number of parallel requests")
+                                                         help="maximum number of parallel requests (default: %(default)s)")
     parser.add_argument('-o', '--output', help="filename to append query results to")
 
     args = parser.parse_args()
