@@ -72,8 +72,9 @@ class BreadthFirstState:
                 n += 1; self.n += 1
                 # In unlimited mode, the queue is on average "fucking big"
                 # surprisingly (to me at least), pre-filtering for duplicates here doesn't do much of anything
-                self.queue.extend(self.board.legal_child_fens(stack=False))
-                if self.n & 0x7FF == 0: print(f"bfs: relative ply {self.board.ply() - self.rootply} {self.n=} {self.d=} {self.d/self.n=:.2%}")
+                # altho even a little something might be a benefit when 1M nodes deep
+                self.queue.extend(filter(lambda f: f not in self.seen, self.board.legal_child_fens(stack=False)))
+                if self.n & 0x7FF == 0: print(f"bfs: {self.n=} relative ply {self.board.ply() - self.rootply}") #{self.d=} {self.d/self.n=:.2%}")
                 self.seen.add(self.fen)
                 yield self.board
             else:
