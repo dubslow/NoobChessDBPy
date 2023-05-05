@@ -152,25 +152,27 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, chunksize=2048):
+    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, batchsize=None):
         '''
         Given a `predicate`, which is a function on (chess.Board, CDB's json data for that board) returning a bool,
-        search for `filter_count` positions which pass the filter, using mass queries of size `chunksize`. Returns a list
-        of such positions found.
+        search for `filter_count` positions which pass the filter, using mass queries of size `batchsize`. Returns a list
+        of such positions found. `batchsize` should be a multiple of `self.concurrency` for efficient use (default 16x).
         '''
-        # TODO: could yield each chunk's results as it goes, to enable writing to file in between each chunk, which
-        # allow interuppting a too-long search
-        found = []
+        if not batchsize:
+            batchsize = 16 * self.concurrency
         bfs = BreadthFirstState(pos)
-        print(f"starting bfs filter search for {filter_count} positions, {chunksize=}")
+        # TODO: could yield each batch's results as it goes, to enable writing to file inbetween each batch, which
+        # would allow interuppting a too-long search
+        found = []
+        print(f"starting bfs filter search for {filter_count} positions, {batchsize=}")
         n = 0
         while len(found) < filter_count:
-            print(f"found {len(found)} from {n} queries, querying next chunk...")
-            results = await self.query_breadth_first(bfs, count=chunksize)
+            print(f"found {len(found)} from {n} queries, querying next batch...")
+            results = await self.query_breadth_first(bfs, count=batchsize)
             for board, response in results:
                 if not isinstance(response, CDBStatus) and predicate(board, response):
                     found.append((board, response))
-            n += chunksize
+            n += batchsize
         print(f"after {n} queries, found {len(found)} positions passing the predicate")
         return found
 
@@ -179,39 +181,39 @@ class AsyncCDBLibrary(AsyncCDBClient):
     # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
     # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
     # enables more accurate estimation (and less overshoot) of queries needed to reach `filtercount` positions.
-    async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount):
-        print(f"{self.concurrency=} {count=}")
-        async with trio.open_nursery() as nursery:
-            nursery.done = trio.Event()
-            # hack: we use this as a counter, without having to separately store a lock and variable
-            nursery.count = trio.Sempahore()  # release = increment lol
-
-            # in general, we use the "tasks close their channel" pattern
-            #send_bfs, recv_bfs = trio.open_memory_channel(self.concurrency)
-            #nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
-
-            results = []
-            #send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
-            #nursery.start_soon(self._serializer, recv_serialize, results)
-
-            #async with recv_bfs, send_serialize:
-            #    for i in range(self.concurrency):
-                    #nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
-
-
-        return results
-
-    async def _query_breadth_filter_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
-                                                  send_serialize:trio.MemorySendChannel):
-        async with recv_bfs, send_serialize:
-            async for board in recv_bfs:
-                await send_serialize.send(await self.query_all(board))
-
-    async def _query_breadth_filter_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
-                                                  maxply=math.inf, count=math.inf):
-        async with send_bfs:
-            for board in bfs.iter_resume(maxply, count):
-                await send_bfs.send(board)
+    #async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount):
+    #    print(f"{self.concurrency=} {count=}")
+    #    async with trio.open_nursery() as nursery:
+    #        nursery.done = trio.Event()
+    #        # hack: we use this as a counter, without having to separately store a lock and variable
+    #        nursery.count = trio.Sempahore()  # release = increment lol
+    #
+    #        # in general, we use the "tasks close their channel" pattern
+    #        #send_bfs, recv_bfs = trio.open_memory_channel(self.concurrency)
+    #        #nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
+    #
+    #        results = []
+    #        #send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
+    #        #nursery.start_soon(self._serializer, recv_serialize, results)
+    #
+    #        #async with recv_bfs, send_serialize:
+    #        #    for i in range(self.concurrency):
+    #                #nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
+    #
+    #
+    #    return results
+    #
+    #async def _query_breadth_filter_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
+    #                                              send_serialize:trio.MemorySendChannel):
+    #    async with recv_bfs, send_serialize:
+    #        async for board in recv_bfs:
+    #            await send_serialize.send(await self.query_all(board))
+    #
+    #async def _query_breadth_filter_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
+    #                                              maxply=math.inf, count=math.inf):
+    #    async with send_bfs:
+    #        for board in bfs.iter_resume(maxply, count):
+    #            await send_bfs.send(board)
 
     ####################################################################################################################
 

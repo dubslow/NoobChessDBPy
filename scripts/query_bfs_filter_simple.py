@@ -17,20 +17,24 @@
 
 '''
 Query positions in breadth first order, subject to a filter, and write the positions to file.
-This can of course easily be expanded to do whatever more analysis the user likes on the positions.
-Configure the defaults by modifying the all capital globals below.
 
-Note that no checking for transpositions or one good pos being the child of another is done. Users
-shouldn't directly construct a book from this, but should do further filtering for variety.
+By default this script has `well_biased_filter`, which searches for knife-edge positions with at least two viable
+noncapture moves.
+
+Of course the user may write any other filter they desire.
+
+The output isn't immediately suitable for book building: no checks are done for transpostions or multiple hits in a
+single PV or similar. Such variety checks should be applied before making a book proper.
 '''
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
+import argparse
+import logging
 
 import trio
 import chess
 
-import logging
+from noobchessdbpy.api import AsyncCDBClient
+from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -39,14 +43,9 @@ logging.basicConfig(
 )
 
 
-from sys import argv
-OUT_FILE  = argv[0].replace('.py', '.txt')
-BASEPOS   = chess.Board() # classical startpos, can also put FEN here
-TARGET    = 200
-CHUNKSIZE = 1024 # should be a multiple of concurrency, which defaults to a small(ish) power of 2
-
-def predicate(board:chess.Board, cdb_json):
-    '''Given a CDB json response for a position, filter for well-biased positions'''
+def well_biased_filter(board:chess.Board, cdb_json):
+    '''Given a CDB json response for a position, filter for well-biased positions, meaning:
+    a position whose top two moves are both noncaptures and in the range [90, 112]'''
     # Refer to AsyncCDBClient.query_all docstring for a quick format reference.
     # Note that we don't actually use the `board` arg here, but ofc some may find use for it
     moves = cdb_json['moves']
@@ -57,18 +56,38 @@ def predicate(board:chess.Board, cdb_json):
     return 90 <= abs(cp1) <= 112 and 90 <= abs(cp2) <= 112
     # one might also consider cdb's "winrate" thingy, 35 <= winrate <= 65 or smth
 
+def well_biased_filter_formatter(board:chess.Board, cdb_json):
+    '''Corresponding to some filter, format the relevant data into a string for output'''
+    return f"{cdb_json['moves'][0]['score']:>4} {cdb_json['moves'][1]['score']:>4} {board.fen()}"
 
-async def query_bfs_filter_simple():
-    async with AsyncCDBLibrary() as lib: # alter the concurrency by kwarg here, if desired (default fastest on author system)
-        filtered_poss = await lib.query_bfs_filter_simple(BASEPOS, predicate, TARGET, chunksize=CHUNKSIZE)
-    print(f"writing to {OUT_FILE}...")
-    with open(OUT_FILE, 'w') as handle:
-        handle.write('\n'.join(
-                               f"{json['moves'][0]['score']} {json['moves'][1]['score']} {board.fen()}"
-                               for board, json in filtered_poss
-                              )
-                     + '\n')
+
+async def query_bfs_filter_simple(args):
+    '''Using any filter, query breadth-first for positions which pass the filter.'''
+    rootpos = args.fen
+    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
+        filtered_poss = await lib.query_bfs_filter_simple(rootpos, well_biased_filter, args.target, args.batchsize)
+    print(f"writing to {args.output}...")
+    with open(args.output, 'w') as handle:
+        handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
     print("complete")
 
 if __name__ == '__main__':
-    trio.run(query_bfs_filter_simple)
+    parser = argparse.ArgumentParser(description='''Query positions in breadth first order, searching for those which
+                                                 pass an arbitrary filter. This uses a simple batching process, querying
+                                                 a batch of positions before filtering the batch, then repeating. As a
+                                                 baseline, this script includes a "well biased" filter, see the script
+                                                 source, but the user may write any filter they please.''')
+
+    parser.add_argument('target', type=int, help='stop after the target number of positions passing the filter')
+    parser.add_argument('-b', '--batchsize', type=int,
+                        help='this many queries between each filtering (default: a multiple of concurrency)')
+    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
+                help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
+    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
+                                                         help="maximum number of parallel requests")
+    from sys import argv
+    parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
+                        help="filename to write query results to (defaults to scriptname.txt)")
+
+    args = parser.parse_args()
+    trio.run(query_bfs_filter_simple, args)
