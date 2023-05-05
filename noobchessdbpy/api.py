@@ -125,26 +125,23 @@ class AsyncCDBClient(httpx.AsyncClient):
                 setattr(self, key, defaultval)
 
     # TODO: http2?
-    def __init__(self, **_kwargs):
+    def __init__(self, **kwargs):
         '''
         This httpx.AsyncClient subclass may be initialized with any kwargs of the parent.
         Also, `self.concurrency` and `self.user` can be set here.
         '''
         # take our kwargs, and delete them from the dict
-        self._process_kwargs(_kwargs)
-        # _kwargs is now only those meant for super(), and we set some defaults too before forwarding
-        kwargs = {
-                  #'base_url': _CDBURL,
-                  'headers':   {'user-agent': self.user + bool(self.user) * '/' + 'noobchessdbpy'},
-                  'timeout':   30,
-                  'limits':    httpx.Limits(max_keepalive_connections=None,
-                                         max_connections=None,
-                                         keepalive_expiry=30
-                                        ),
-                  #'http2':    True,
-                  **_kwargs
-                 }
-        super().__init__(**kwargs)
+        self._process_kwargs(kwargs)
+        # kwargs is now only those meant for super(), and we set some defaults too before forwarding
+        self_kwargs = {#'base_url': _CDBURL,
+                       'headers':   {'user-agent': self.user + bool(self.user) * '/' + 'noobchessdbpy'},
+                       'timeout':   30,
+                       'limits':    httpx.Limits(max_keepalive_connections=None,
+                                                 max_connections=None,
+                                                 keepalive_expiry=30),
+                       #'http2':    True,
+                      }
+        super().__init__(**self_kwargs, **kwargs)
 
     ####################################################################################################################
 
