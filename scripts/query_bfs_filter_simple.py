@@ -29,6 +29,7 @@ single PV or similar. Such variety checks should be applied before making a book
 
 import argparse
 import logging
+import math
 
 import trio
 import chess
@@ -65,20 +66,27 @@ async def query_bfs_filter_simple(args):
     '''Using any filter, query breadth-first for positions which pass the filter.'''
     rootpos = args.fen
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        filtered_poss = await lib.query_bfs_filter_simple(rootpos, well_biased_filter, args.target, args.batchsize)
+        filtered_poss = await lib.query_bfs_filter_simple(rootpos, well_biased_filter, args.target, args.ply, args.count, args.batchsize)
     print(f"writing to {args.output}...")
     with open(args.output, 'w') as handle:
         handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
     print("complete")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''Query positions in breadth first order, searching for those which
                                                  pass an arbitrary filter. This uses a simple batching process, querying
                                                  a batch of positions before filtering the batch, then repeating. As a
                                                  baseline, this script includes a "well biased" filter, see the script
-                                                 source, but the user may write any filter they please.''')
+                                                 source, but the user may write any filter they please.
+                                                 One of the limits is required, see below.''')
 
-    parser.add_argument('target', type=int, help='stop after the target number of positions passing the filter')
+    limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
+    limits.add_argument('-l', '--count', '--limit-count', type=int,
+                        help='the maximum number of positions to query (rounded to batchsize)')
+    limits.add_argument('-p', '--ply', '--limit-ply', type=int, help='the max ply from the root to query')
+    limits.add_argument('-t', '--target', type=int, help='stop after the target number of positions passing the filter')
+
     parser.add_argument('-b', '--batchsize', type=int,
                         help='this many queries between each filtering (default: a multiple of concurrency)')
     parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
@@ -90,4 +98,14 @@ if __name__ == '__main__':
                         help="filename to write query results to (defaults to scriptname.txt)")
 
     args = parser.parse_args()
+
+    if not args.count and not args.ply and not args.target:
+        parser.error("at least one of the limits is required (see --help)")
+    if args.count is None:
+        args.count = math.inf
+    if args.ply is None:
+        args.ply = math.inf
+    if args.target is None:
+        args.target = math.inf
+
     trio.run(query_bfs_filter_simple, args)

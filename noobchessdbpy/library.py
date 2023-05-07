@@ -83,6 +83,9 @@ class BreadthFirstState:
             self.board = chess.Board(self.fen)
         print(f"finished bfs iter at {n=}, relative ply {self.board.ply() - self.rootply}")
 
+    def relative_ply(self):
+        return self.board.ply() - self.rootply
+
 ########################################################################################################################
 
 class AsyncCDBLibrary(AsyncCDBClient):
@@ -153,7 +156,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, batchsize=None):
+    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, maxply=math.inf, count=math.inf, batchsize=None):
         '''
         Given a `predicate`, which is a function on (chess.Board, CDB's json data for that board) returning a bool,
         search for `filter_count` positions which pass the filter, using mass queries of size `batchsize`. Returns a list
@@ -167,13 +170,13 @@ class AsyncCDBLibrary(AsyncCDBClient):
         found = []
         print(f"starting bfs filter search for {filter_count} positions, {batchsize=}")
         n = 0
-        while len(found) < filter_count:
+        while n < count and len(found) < filter_count and bfs.relative_ply() <= maxply:
             print(f"found {len(found)} from {n} queries, querying next batch...")
-            results = await self.query_breadth_first(bfs, count=batchsize)
+            results = await self.query_breadth_first(bfs, maxply, count=batchsize)
+            n += len(results)
             for board, response in results:
                 if not isinstance(response, CDBStatus) and predicate(board, response):
                     found.append((board, response))
-            n += batchsize
         print(f"after {n} queries, found {len(found)} positions passing the predicate")
         return found
 

@@ -69,11 +69,11 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', help="filename to append query results to")
 
     args = parser.parse_args()
+
     if not args.count and not args.ply and not args.infinite:
         parser.error("at least one of the limits is required (see --help)")
     elif args.infinite and (args.count or args.ply):
         parser.error("cannot have limits and --infinite (see --help)")
-
     if args.count is None:
         args.count = math.inf
     if args.ply is None:
