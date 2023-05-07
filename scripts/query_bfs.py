@@ -16,8 +16,9 @@
 #    See the LICENSE file for more details.
 
 '''
-A skeleton example: queries positions breadth first, returning the moves-results from CDB, and optionally writing to
-file.
+A skeleton example script: query positions in breadth first order, optionally writing the results to file.
+
+One of the limit arguments is required, see below.
 '''
 
 import argparse
@@ -54,8 +55,7 @@ async def query_bfs(rootpos, maxply=math.inf, count=math.inf, outfile=None, conc
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='''Query positions in breadth first order, optionally writing to file.
-                                                 One of the limits is required, see below.''')
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 
     limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
     limits.add_argument('-l', '--count', '--limit-count', type=int, help='the maximum number of positions to query')

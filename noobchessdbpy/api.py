@@ -15,11 +15,14 @@
 #
 #    See the LICENSE file for more details.
 
-__all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
-
-'''The python wrapper to the CDB API. In general, create an AsyncCDBClient instance, and use its methods to make API calls.
+'''
+The python wrapper to the CDB API. In general, create an AsyncCDBClient instance, and use its methods to make API calls.
 This class inherits from httpx.AsyncClient, and forwards kwargs.
-API call return values are generally json or a CDBStatus value.'''
+
+API call return values are generally json or a CDBStatus value.
+'''
+
+__all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
 
 import trio
 import httpx

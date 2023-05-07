@@ -15,10 +15,16 @@
 #
 #    See the LICENSE file for more details.
 
-__all__ = ['BreadthFirstState', 'AsyncCDBLibrary']
+'''
+This file implements some standard CDB interaction algorithms, building atop the API.
 
-'''This file implements some standard CDB interaction algorithms, building atop the API.
-Arguments may be either `chess` objects or strings, altho work TBD to handle strings'''
+Since we want to keep reusing one http client, the algorithms are all implemented as methods on a further subclass of the
+API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms.
+
+Arguments are generally `chess` objects.
+'''
+
+__all__ = ['BreadthFirstState', 'AsyncCDBLibrary']
 
 import chess
 import chess.pgn

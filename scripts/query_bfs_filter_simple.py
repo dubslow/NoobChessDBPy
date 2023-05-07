@@ -16,15 +16,26 @@
 #    See the LICENSE file for more details.
 
 '''
-Query positions in breadth first order, subject to a filter, and write the positions to file.
+Query positions in breadth first order, filter them by an arbitrary predicate, and write the accepted positions to file.
 
-By default this script has `well_biased_filter`, which searches for knife-edge positions with at least two viable
-noncapture moves.
+This "simple" version uses a batching process: query a batch of positions, then filter the batch, then query more positions
+until the given limits are reached. (One or more limit arguments are required, see below.)
 
-Of course the user may write any other filter they desire.
+As a baseline, this script includes a default, example filter called `well_biased_filter`. `well_biased_filter` accepts
+knife-edge positions with at least two viable moves.
 
-The output isn't immediately suitable for book building: no checks are done for transpostions or multiple hits in a
-single PV or similar. Such variety checks should be applied before making a book proper.
+Of course the user may write any other filter they desire. Many more advanced filters are possible based on CDB's
+query-response data.
+
+Be warned that the output isn't immediately suitable for book building: no checks are done for transpostions or multiple
+hits in a single PV or similar. Such variety checks should be applied before making a book proper.
+
+Being a "brute force" breadth-first iterator, the positions produced will have been reached by blunders, on average --
+but blunders that average out to passing the filter.
+
+Finally, for root positions other than the startpos, CDB is likely to not know most of these blundering positions.
+Therefore, running a non-startpos query twice, the second a day after the first, is likely to produce more filtered
+positions, after the CDB elves have processed the formerly-unknown blunder positions.
 '''
 
 import argparse
@@ -46,7 +57,7 @@ logging.basicConfig(
 
 def well_biased_filter(board:chess.Board, cdb_json):
     '''Given a CDB json response for a position, filter for well-biased positions, meaning:
-    a position whose top two moves are both noncaptures and in the range [90, 112]'''
+    a position whose top two moves are in the range [90, 112]'''
     # Refer to AsyncCDBClient.query_all docstring, or the CDB website, for a quick format reference.
     # Note that we don't actually use the `board` arg here, but ofc some may find use for it
     moves = cdb_json['moves']
@@ -75,12 +86,7 @@ async def query_bfs_filter_simple(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='''Query positions in breadth first order, searching for those which
-                                                 pass an arbitrary filter. This uses a simple batching process, querying
-                                                 a batch of positions before filtering the batch, then repeating. As a
-                                                 baseline, this script includes a "well biased" filter, see the script
-                                                 source, but the user may write any filter they please.
-                                                 One of the limits is required, see below.''')
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 
     limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
     limits.add_argument('-l', '--count', '--limit-count', type=int,
@@ -91,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--batchsize', type=int,
                         help='this many queries between each filtering (default: a multiple of concurrency)')
     parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
-                help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
+          help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                          help="maximum number of parallel requests")
     from sys import argv
