@@ -68,7 +68,7 @@ _known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     for kw in kwargs:
         if kw not in _known_cdb_kwargs:
-            raise CDBError(f"unknown api argument: {kw}")
+            raise CDBError(f"unknown api argument: {kw} (should be from {_known_cdb_args})")
     kwargs['json']  = 1
     if board:
         if board.is_game_over():
@@ -153,6 +153,25 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
+    async def _base_query(self, board:chess.Board, *, action, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Base method for query-type actions. query_all is probably the one you want
+        '''
+        params = _prepare_params(kwargs, board)
+        if not isinstance(params, dict):
+            return params
+        params['action'] = action
+
+        resp = await self.get(url=_CDBURL, params=params)
+
+        json = resp.json()
+        #pprint(json)
+        #print(resp.http_version)
+        #print(json['status'])
+        if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
+            return err
+        return json
+
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
         Query all known moves for a given position
@@ -167,23 +186,43 @@ class AsyncCDBClient(httpx.AsyncClient):
         "ply": the shortest path from the rootpos to the classical startpos
         "status": see CDBStatus
 
-        returns a CDBStatus if the json status isn't CDBStatus.Success
+        returns a CDBStatus if the json status isn't success
         '''
-        params = _prepare_params(kwargs, board)
-        if not isinstance(params, dict):
-            return params
-        params['action'] = 'queryall'
+        return await self._base_query(board, raisers=raisers, **kwargs, action='queryall')
 
-        resp = await self.get(url=_CDBURL, params=params)
+    async def query_best(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Get a best move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
+        (If there's a tie for best, a ~random one will be chosen.)
 
-        json = resp.json()
-        #pprint(json)
-        #print(resp.http_version)
-        #print(json['status'])
-        if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
-            return err
-        return json
+        json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
 
+        returns a CDBStatus if the json status isn't success
+        '''
+        return await self._base_query(board, raisers=raisers, **kwargs, action='querybest')
+
+    async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Get a random move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
+
+        json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
+
+        returns a CDBStatus if the json status isn't success
+        '''
+        return await self._base_query(board, raisers=raisers, **kwargs, action='query')
+
+    async def query_search(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
+        CDB api doc page.
+
+        json looks like: `{'status': 'ok', 'search_moves': [{'uci': 'f2f4', 'san': 'f4'}, ...]}` (or `'egtb': 'd2d4'`)
+
+        returns a CDBStatus if the json status isn't success
+        '''
+        return await self._base_query(board, raisers=raisers, **kwargs, action='querysearch')
+
+    ####################################################################################################################
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''Queue for later analysis a single position'''
@@ -198,6 +237,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         #print(json)
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
 
+    ####################################################################################################################
+
     async def _clear_limit(self, **kwargs) -> CDBStatus:
         params = _prepare_params(kwargs)
         if not isinstance(params, dict):
@@ -208,7 +249,6 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         json = resp.json()
         return _parse_status(json['status'])
-
 
     ####################################################################################################################
 
