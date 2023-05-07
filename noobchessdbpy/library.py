@@ -174,7 +174,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         # TODO: could yield each batch's results as it goes, to enable writing to file inbetween each batch, which
         # would allow interuppting a too-long search
         found = []
-        print(f"starting bfs filter search for {filter_count} positions, {batchsize=}")
+        print(f"starting bfs filter search, limits: {maxply=} {count=}, target positions = {filter_count} ({batchsize=})")
         n = 0
         while n < count and len(found) < filter_count and bfs.relative_ply() <= maxply:
             print(f"found {len(found)} from {n} queries, querying next batch...")
