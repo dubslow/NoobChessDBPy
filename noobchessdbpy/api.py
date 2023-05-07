@@ -17,9 +17,14 @@
 
 '''
 The python wrapper to the CDB API. In general, create an AsyncCDBClient instance, and use its methods to make API calls.
-This class inherits from httpx.AsyncClient, and forwards kwargs.
+This class inherits from httpx.AsyncClient, and forwards kwargs thereto.
 
-API call return values are generally json or a CDBStatus value.
+API call return values are generally json (i.e. a python dict) or a CDBStatus value.
+
+Also exposed here are `CDBStatus`, an enum, and `CDBError`, which is a generic `Exception` for when CDB complains about
+a request.
+
+See also the docstrings of these objects.
 '''
 
 __all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
@@ -36,11 +41,11 @@ _CDBURL = 'https://www.chessdb.cn/cdb.php'
 class CDBStatus(StrEnum):
     '''
     Enum used for non-moves return values from CDB.
-    
-    Ok = query served
+
     Success = normal request and response
     GameOver includes checkmate, stalemate
-    UnknownBoard = position not in DB (but maybe now added)
+    InvalidBoard is what it sounds like
+    UnknownBoard = position not in DB (but maybe now added as a result)
     NoBestMove = position exists, but nevertheless no moves
     TrivialBoard = request for analysis was ignored because trivial position
     LimitExceeded = too many requests from this ipaddr

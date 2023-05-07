@@ -16,7 +16,7 @@
 #    See the LICENSE file for more details.
 
 '''
-This file implements some standard CDB interaction algorithms, building atop the API.
+This module implements some standard CDB interaction algorithms, building atop the API.
 
 Since we want to keep reusing one http client, the algorithms are all implemented as methods on a further subclass of the
 API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms.

@@ -18,8 +18,8 @@
 '''
 Query positions in breadth first order, filter them by an arbitrary predicate, and write the accepted positions to file.
 
-This "simple" version uses a batching process: query a batch of positions, then filter the batch, then query more positions
-until the given limits are reached. (One or more limit arguments are required, see below.)
+This "simple" version uses a batching process: query a batch of positions, then filter the batch, then query another
+batch, etc, until the given limits are reached. (One or more limit arguments are required, see below.)
 
 As a baseline, this script includes a default, example filter called `well_biased_filter`. `well_biased_filter` accepts
 knife-edge positions with at least two viable moves.
