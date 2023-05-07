@@ -1,7 +1,10 @@
+## CDB Python API
+
 A currently-skeletal python interface to CDB using async+trio.
 
 CDB is this: https://www.chessdb.cn/queryc_en/ altho it goes by so many names that the package name is longer for
-unambiguity. Nevertheless in context it shall simply be called CDB.
+unambiguity. Nevertheless in context it shall simply be called CDB. It is maintained here:
+https://github.com/noobpwnftw/chessdb
 
 The two basic actions on CDB are "query" and "queue". A query is a read-op, requesting information, moves, scores, on
 a given position, whatever the db already knows. A queue is a write-op, requesting for the CDB backend to store a given
