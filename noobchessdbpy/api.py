@@ -21,8 +21,8 @@ This class inherits from httpx.AsyncClient, and forwards kwargs thereto.
 
 API call return values are generally json (i.e. a python dict) or a CDBStatus value.
 
-Also exposed here are `CDBStatus`, an enum, and `CDBError`, which is a generic `Exception` for when CDB complains about
-a request.
+Also exposed here are `CDBStatus`, an enum reflecting the status of a single API response, and `CDBError`, which is a
+generic `Exception` for when those statuses are bad.
 
 See also the docstrings of these objects.
 '''
@@ -33,12 +33,12 @@ import trio
 import httpx
 import chess
 
-from enum import StrEnum, auto
+from enum import Enum, auto
 from pprint import pprint
 
 _CDBURL = 'https://www.chessdb.cn/cdb.php'
 
-class CDBStatus(StrEnum):
+class CDBStatus(Enum):
     '''
     Enum used for non-moves return values from CDB.
 
