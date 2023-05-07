@@ -47,12 +47,13 @@ logging.basicConfig(
 def well_biased_filter(board:chess.Board, cdb_json):
     '''Given a CDB json response for a position, filter for well-biased positions, meaning:
     a position whose top two moves are both noncaptures and in the range [90, 112]'''
-    # Refer to AsyncCDBClient.query_all docstring for a quick format reference.
+    # Refer to AsyncCDBClient.query_all docstring, or the CDB website, for a quick format reference.
     # Note that we don't actually use the `board` arg here, but ofc some may find use for it
     moves = cdb_json['moves']
     if len(moves) < 5: return False # Guarantee some minimum quality of analysis
     t1, t2 = moves[0:2]
-    if 'x' in t1['san'] or 'x' in t2['san']: return False
+    # don't filter captures by default, but it's a small example of what's possible with cdb data
+    #if 'x' in t1['san'] or 'x' in t2['san']: return False
     cp1, cp2 = t1['score'], t2['score']
     return 90 <= abs(cp1) <= 112 and 90 <= abs(cp2) <= 112
     # one might also consider cdb's "winrate" thingy, 35 <= winrate <= 65 or smth
