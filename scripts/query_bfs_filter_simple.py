@@ -49,7 +49,7 @@ def well_biased_filter(board:chess.Board, cdb_json):
     # Refer to AsyncCDBClient.query_all docstring for a quick format reference.
     # Note that we don't actually use the `board` arg here, but ofc some may find use for it
     moves = cdb_json['moves']
-    if len(moves) <= 1: return False
+    if len(moves) <= 5: return False # Guarantee some minimum quality of analysis
     t1, t2 = moves[0:2]
     if 'x' in t1['san'] or 'x' in t2['san']: return False
     cp1, cp2 = t1['score'], t2['score']
