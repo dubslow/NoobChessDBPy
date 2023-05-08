@@ -206,7 +206,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def query_best(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get a best move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
+        Get a "rank" == 2 move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
         (If there's a tie for best, a ~random one will be chosen.)
 
         json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
@@ -217,7 +217,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get a ?? move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
+        Get a "rank" > 0 move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
 
         json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
 
@@ -227,8 +227,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def query_search(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
-        CDB api doc page.
+        Get all "rank" > 0 moves for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
 
         json looks like: `{'status': 'ok', 'search_moves': [{'uci': 'f2f4', 'san': 'f4'}, ...]}` (or `'egtb': 'd2d4'`)
 
