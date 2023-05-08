@@ -286,6 +286,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         n += len(comment_pv_sans)
                         #print(f"found comment pv at board:\n{board}\nadding {len(comment_pv_sans)} positions")
                         # generally, the first move of pv is the same as the played move, but rarely not
+                        #if comment_pv_sans[0] != node.san():
+                        #    print(f"game {i}, ply {board.ply()}: found node where move played differs from pv! {node.san()} vs {comment_pv_sans[0]} ")
                         for fen in pboard.yield_fens_from_sans(comment_pv_sans):
                             all_positions.add(fen)
             print(f"in game {i} found {m} nodes, {n} positions")
