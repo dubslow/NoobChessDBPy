@@ -135,7 +135,7 @@ class AsyncCDBClient(httpx.AsyncClient):
     # TODO: http2?
     def __init__(self, **kwargs):
         '''
-        This httpx.AsyncClient subclass may be initialized with any kwargs of the parent.
+        This `httpx.AsyncClient` subclass may be initialized with any kwargs of the parent.
         Also, `self.concurrency` and `self.user` can be set here.
         '''
         # take our kwargs, and delete them from the dict
@@ -172,6 +172,20 @@ class AsyncCDBClient(httpx.AsyncClient):
             return err
         return json
 
+    # In principle, we could or should be using some `functools.partial*` type thing for these, but those don't do any
+    # sort of metadata and here we need the metadata, not only the docstring but also stuff like __name__ and
+    # __qualname__ and others, so... here we are, repeating the signature twice for each copy in order to get all the
+    # correct metadata. Maybe in the future we can have a sort of pattern like this....?
+    #
+    # @functools.partial_inplace(generic_func, arg='specialized1')
+    # def specialized1_func(generic_func_signature):
+    #     '''specialized docstring'''
+    #     pass
+    #
+    # This still requires repeating the signature once, but that's less than below, and also it would be nice if
+    # all the `partial*` flavors could optimize out the extra stack frame (but maybe that doesn't matter after 3.11)?
+    # ...I should probably get my head out of the clouds lol
+
     async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
         Query all known moves for a given position
@@ -184,9 +198,9 @@ class AsyncCDBClient(httpx.AsyncClient):
             "notes" is as on the web interface, counting child nodes and annotating the move
             "san" and "uci" describe the move itself in the respective notation
         "ply": the shortest path from the rootpos to the classical startpos
-        "status": see CDBStatus
+        "status": see `CDBStatus`
 
-        returns a CDBStatus if the json status isn't success
+        returns a `CDBStatus` if the json status isn't success
         '''
         return await self._base_query(board, raisers=raisers, **kwargs, action='queryall')
 
@@ -197,17 +211,17 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
 
-        returns a CDBStatus if the json status isn't success
+        returns a `CDBStatus` if the json status isn't success
         '''
         return await self._base_query(board, raisers=raisers, **kwargs, action='querybest')
 
     async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get a random move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
+        Get a ?? move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
 
         json looks like: `{'status': 'ok', 'move': 'd2d4'}` (or `'egtb': 'd2d4'`)
 
-        returns a CDBStatus if the json status isn't success
+        returns a `CDBStatus` if the json status isn't success
         '''
         return await self._base_query(board, raisers=raisers, **kwargs, action='query')
 
@@ -218,9 +232,32 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         json looks like: `{'status': 'ok', 'search_moves': [{'uci': 'f2f4', 'san': 'f4'}, ...]}` (or `'egtb': 'd2d4'`)
 
-        returns a CDBStatus if the json status isn't success
+        returns a `CDBStatus` if the json status isn't success
         '''
         return await self._base_query(board, raisers=raisers, **kwargs, action='querysearch')
+
+    async def query_score(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
+        CDB api doc page.
+
+        json looks like: `{'status': 'ok', 'eval': 109, 'ply': 1}` (guess what position that was Kappa)
+
+        returns a `CDBStatus` if the json status isn't success
+        '''
+        return await self._base_query(board, raisers=raisers, **kwargs, action='queryscore')
+
+    async def query_pv(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
+        CDB api doc page.
+
+        json looks like: `{'status': 'ok', 'score': 109, 'depth': 41, 'pv': ['d7d5', 'h2h3', ...]}` (seriously it should
+        be immediately obvious what position this is lol)
+
+        returns a `CDBStatus` if the json status isn't success
+        '''
+        return await self._base_query(board, raisers=raisers, **kwargs, action='querypv')
 
     ####################################################################################################################
 
