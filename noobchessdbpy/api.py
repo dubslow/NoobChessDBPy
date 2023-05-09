@@ -71,7 +71,7 @@ class CDBError(Exception):
 _known_cdb_params = {"action", "showall", "learn", "egtbmetric", "endgame", "move"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     '''
-    Prepare the parameters to the GET request.
+    Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
     '''
     for kw in kwargs:
         if kw not in _known_cdb_params:
@@ -183,6 +183,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         returns a `CDBStatus` if the json status isn't success (or possibly raise a CDBError)
         '''
         json = await self._base_request(board, action=action, **kwargs)
+        if not isinstance(json, dict): # CDBStatus.GameOver, no request was sent
+            return json
         if (cdb_status := _parse_status(json.get('status'), board, raisers)) is not CDBStatus.Success:
             return cdb_status
         return json
@@ -282,6 +284,8 @@ class AsyncCDBClient(httpx.AsyncClient):
         returns a CDBStatus (or possibly raise a CDBError)
         '''
         json = await self._base_request(board, action=action, **kwargs)
+        if not isinstance(json, dict): # CDBStatus.GameOver, no request was sent
+            return json
         return _parse_status(json.get('status'), board, raisers)
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
