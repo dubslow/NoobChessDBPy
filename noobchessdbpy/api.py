@@ -64,12 +64,12 @@ class CDBError(Exception):
 
 
 # Maybe these helper funcs should be static methods on the Client below?
-_known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame"}
+_known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame", "move"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     for kw in kwargs:
         if kw not in _known_cdb_kwargs:
             raise CDBError(f"unknown api argument: {kw} (should be from {_known_cdb_args})")
-    kwargs['json']  = 1
+    kwargs['json'] = 1
     if board:
         if board.is_game_over():
             return CDBStatus.GameOver
@@ -260,31 +260,41 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
-    async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
-        '''Queue for later analysis a single position'''
+    async def _base_no_retval(self, board:chess.Board=None, *, action, raisers:set=None, **kwargs) -> CDBStatus:
+        '''
+        Base method for no-retval-type actions. `queue` is probably the one you want
+        '''
         params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
             return params
-        params['action'] = 'queue'
+        params['action'] = action
+        #print(params)
 
         resp = await self.get(url=_CDBURL, params=params)
 
+        #print(resp)
         json = resp.json()
         #print(json)
         return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
 
-    ####################################################################################################################
+    async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
+        '''
+        Queue for later analysis a single position. This has recursive effects on the DB, so the cost of this action
+        increases as the `board` gets closer to the root. Use with caution.
+        '''
+        return await self._base_no_retval(board, raisers=raisers, **kwargs, action='queue')
+
+    async def store(self, board:chess.Board, move:chess.Move, raisers:set=None, **kwargs) -> CDBStatus:
+        '''
+        Kinda like a lower-cost queue, I think? This is how CDB elves report their results
+        '''
+        return await self._base_no_retval(board, raisers=raisers, **kwargs, action='store', move=f"move:{move.uci()}")
 
     async def _clear_limit(self, **kwargs) -> CDBStatus:
-        params = _prepare_params(kwargs)
-        if not isinstance(params, dict):
-            return params
-        params['action'] = 'clearlimit'
-
-        resp = await self.get(url=_CDBURL, params=params)
-
-        json = resp.json()
-        return _parse_status(json['status'])
+        '''
+        Use this to reset your IP addr's daily request limit.
+        '''
+        return await self._base_no_retval(board, raisers=raisers, **kwargs, action='clearlimit')
 
     ####################################################################################################################
 
