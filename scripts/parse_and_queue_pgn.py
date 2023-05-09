@@ -16,10 +16,12 @@
 #    See the LICENSE file for more details.
 
 '''
-This script reads a PGN file, reads games from that file into memory, finds all positions in the games (including PVs
-stored in comments), deduplicates the positions, and mass-queues the resulting unique positions. Although this accepts
-a list of filenames, each file is processed and deduplicated individually. (Note: queueing near-root positions can be
-quite expensive, so use this with caution. TODO: write a better form that does some queueing, some querying only)
+This script reads PGN files, one at a time: read games from one file into memory, find all positions in the games
+(including PVs stored in comments), deduplicate the positions, rinse and repeat, then cross-deduplicate from all files.
+Then mass-queue the cross-deduplicated positions into CDB.
+(Note: queueing near-root positions can be quite expensive, so use this with caution. TODO: write a better form that
+does only some queueing, and some querying instead)
+Note: queue order is arbitrary.
 '''
 
 import argparse
@@ -40,20 +42,25 @@ logging.basicConfig(
 
 async def parse_and_queue_pgn(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
+        all_positions, n, u_sub = set(), 0, 0
         for filename in args.filenames:
             with open(filename) as filehandle:
-                all_positions = lib.parse_pgn(filehandle, args.start, args.count)
-            n = len(all_positions)
-            print(f"now mass queueing {n} positions")
-            await lib.mass_queue(all_positions)
-            print(f"all {n} positions have been queued for analysis")
+                this_positions, x = lib.parse_pgn(filehandle, args.start, args.count)
+            n += x
+            u_sub += len(this_positions)
+            all_positions |= this_positions
+            u = len(all_positions)
+            print(f"""after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} total,\
+ {u/n if n else math.nan:.2%} unique rate""")
+        print(f"now mass queueing {u} positions")
+        await lib.mass_queue(all_positions)
+        print(f"all {u} positions have been queued for analysis")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('filenames', nargs='+',
-                        help="""A list of filenames to read PGN from. Each is processed and deduplicated individually;
-                             to deduplicate everything, cat them all into one file.""")
+                        help="""A list of filenames to read PGN from. """)
     parser.add_argument('-l', '--count', '--limit-count', type=int, default=math.inf,
                         help='the maximum number of games to process from each file')
     parser.add_argument('-s', '--start', type=int, default=0,

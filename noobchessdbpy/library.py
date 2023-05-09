@@ -229,17 +229,20 @@ class AsyncCDBLibrary(AsyncCDBClient):
     ####################################################################################################################
 
     @staticmethod
-    def parse_pgn(filehandle, start=0, count=math.inf) -> set[str]:
+    def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
         '''
-        Read one PGN file: load any and all positions found in the file into memory and deduplicate, returning a set of
-        FENs. With large files, can cause large memory consumption.
+        Read one PGN file: load any and all positions found in the file into memory, including all PVs in comments.
+        Deduplicate, returning a set of FENs. With large files, can cause large memory consumption.
 
         The PGN parser is so tolerant to malformed data that detecting it is difficult. Thus, malformed data may cause
         difficult-to-trace downstream errors.
 
-        Skip `start` games from the file, then read no more than `count`.
+        Users pass a `filehandle`, whose management is the user's problem. Skip `start` games from the file, then read
+        no more than `count`.
+
+        returns (set of unique-ified parsed postions, count of pre-dedup positions seen)
         '''
-        print(f"reading {filehandle.name}...")
+        print(f"reading '{filehandle.name}' ...")
 
         if start > 0:
             print(f"skipping {start} games")
@@ -249,7 +252,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             #print(f"skipped a game, {_start} to go")
         if _start > 0:
             print(f"still need to skip {_start} games but no more in the file")
-            return set()
+            return set(), 0
 
         games = []
         n = 0
@@ -262,10 +265,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
             print(f"read {n} games from {filehandle.name}")
         # no real way to validate the parsed data, just assume it's good and hope for the best
 
-        all_positions = set() # read entire file and de-duplicate before sending queue requests
+        all_positions = set()
         x = 0
         for i, game in enumerate(games, start=start+1):
-            n, m = 0, 0
+            n = m = 0
             #print(f"processing game {i}")
             for node in game.all_variations():
                 parent = node.parent
@@ -295,7 +298,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             x += n
         unique = len(all_positions)
         print(f"after deduplication, found {unique} unique positions from {x} total, {unique/x:.2%} unique rate")
-        return all_positions # hopefully all the other crap here is garbage-collected quickly, freeing memory
+        return all_positions, x # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
 
     async def mass_queue(self, all_positions:set[str]):
