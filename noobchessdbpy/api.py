@@ -55,7 +55,7 @@ class CDBStatus(Enum):
     InvalidBoard  = "invalid board"
     UnknownBoard  = "unknown"
     NoBestMove    = "nobestmove"
-    TrivialBoard  = ""
+    TrivialBoard  = None # type consistency is too much to ask for I guess
     LimitExceeded = "rate limit exceeded"
     LimitCleared  = "rate limit cleared"
 
@@ -78,7 +78,7 @@ def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
 
 def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
     if raisers is None:
-        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard, CDBStatus.NoBestMove}
+        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard, CDBStatus.TrivialBoard, CDBStatus.NoBestMove}
     try:
         status = CDBStatus(text)
     except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
@@ -168,7 +168,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         #pprint(json)
         #print(resp.http_version)
         #print(json['status'])
-        if (err := _parse_status(json['status'], board)) is not CDBStatus.Success:
+        if (err := _parse_status(json.get('status'), board)) is not CDBStatus.Success:
             return err
         return json
 
@@ -275,7 +275,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         #print(resp)
         json = resp.json()
         #print(json)
-        return _parse_status(json['status'], board, raisers) if json else json # queue in TB => empty resp (violates type)
+        return _parse_status(json.get('status'), board, raisers) # queue in TB => empty resp (violates type)
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''
