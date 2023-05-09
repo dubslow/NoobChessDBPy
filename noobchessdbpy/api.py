@@ -29,12 +29,15 @@ See also the docstrings of these objects.
 
 __all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
 
-import trio
-import httpx
-import chess
+########################################################################################################################
 
 from enum import Enum, auto
-from pprint import pprint
+
+import chess
+import httpx
+import trio # TODO: make this module eventloop-agnostic
+
+########################################################################################################################
 
 _CDBURL = 'https://www.chessdb.cn/cdb.php'
 
@@ -62,6 +65,7 @@ class CDBStatus(Enum):
 class CDBError(Exception):
     pass
 
+########################################################################################################################
 
 # Maybe these helper funcs should be static methods on the Client below?
 _known_cdb_params = {"action", "showall", "learn", "egtbmetric", "endgame", "move"}

@@ -26,17 +26,18 @@ Arguments are generally `chess` objects.
 
 __all__ = ['BreadthFirstState', 'AsyncCDBLibrary']
 
+########################################################################################################################
+
+from collections import deque
+import math
+from typing import Iterable
+
 import chess
 import chess.pgn
 import trio
 
 from .api import AsyncCDBClient, CDBStatus
 from . import chess_extensions
-
-import math
-from collections import deque
-from pprint import pprint
-from typing import Iterable
 
 ########################################################################################################################
 
