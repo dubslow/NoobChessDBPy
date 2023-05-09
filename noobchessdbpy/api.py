@@ -286,7 +286,8 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def store(self, board:chess.Board, move:chess.Move, raisers:set=None, **kwargs) -> CDBStatus:
         '''
-        Kinda like a lower-cost queue, I think? This is how CDB elves report their results
+        Like `queue` but only scores this move instead of sieving for 5 on the child.
+        (This is how CDB elves report their results)
         '''
         return await self._base_no_retval(board, raisers=raisers, **kwargs, action='store', move=f"move:{move.uci()}")
 
