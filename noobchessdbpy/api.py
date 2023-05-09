@@ -64,10 +64,13 @@ class CDBError(Exception):
 
 
 # Maybe these helper funcs should be static methods on the Client below?
-_known_cdb_kwargs = {"showall", "learn", "egtbmetric", "endgame", "move"}
+_known_cdb_params = {"action", "showall", "learn", "egtbmetric", "endgame", "move"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
+    '''
+    Prepare the parameters to the GET request.
+    '''
     for kw in kwargs:
-        if kw not in _known_cdb_kwargs:
+        if kw not in _known_cdb_params:
             raise CDBError(f"unknown api argument: {kw} (should be from {_known_cdb_args})")
     kwargs['json'] = 1
     if board:
@@ -153,23 +156,31 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
-    async def _base_query(self, board:chess.Board, *, action, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def _base_request(self, board:chess.Board, *, action, **kwargs) -> dict:
         '''
-        Base method for query-type actions. query_all is probably the one you want
+        Gather args into GET params and return json
         '''
         params = _prepare_params(kwargs, board)
         if not isinstance(params, dict):
             return params
         params['action'] = action
+        #print(params)
 
         resp = await self.get(url=_CDBURL, params=params)
+        #print(resp, resp.json())
+        return resp.json()
 
-        json = resp.json()
-        #pprint(json)
-        #print(resp.http_version)
-        #print(json['status'])
-        if (err := _parse_status(json.get('status'), board)) is not CDBStatus.Success:
-            return err
+    ####################################################################################################################
+
+    async def _base_query(self, board:chess.Board, *, action, raisers:set=None, **kwargs) -> dict | CDBStatus:
+        '''
+        Private base method for query-type actions. query_all is probably the one you want
+
+        returns a `CDBStatus` if the json status isn't success (or possibly raise a CDBError)
+        '''
+        json = await self._base_request(board, action=action, **kwargs)
+        if (cdb_status := _parse_status(json.get('status'), board, raisers)) is not CDBStatus.Success:
+            return cdb_status
         return json
 
     # In principle, we could or should be using some `functools.partial*` type thing for these, but those don't do any
@@ -262,19 +273,11 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def _base_no_retval(self, board:chess.Board=None, *, action, raisers:set=None, **kwargs) -> CDBStatus:
         '''
-        Base method for no-retval-type actions. `queue` is probably the one you want
+        Private base method for no-retval-type actions. `queue` is probably the one you want
+
+        returns a CDBStatus (or possibly raise a CDBError)
         '''
-        params = _prepare_params(kwargs, board)
-        if not isinstance(params, dict):
-            return params
-        params['action'] = action
-        #print(params)
-
-        resp = await self.get(url=_CDBURL, params=params)
-
-        #print(resp)
-        json = resp.json()
-        #print(json)
+        json = await self._base_request(board, action=action, **kwargs)
         return _parse_status(json.get('status'), board, raisers)
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
