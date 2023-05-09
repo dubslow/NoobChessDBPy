@@ -275,7 +275,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         #print(resp)
         json = resp.json()
         #print(json)
-        return _parse_status(json.get('status'), board, raisers) # queue in TB => empty resp (violates type)
+        return _parse_status(json.get('status'), board, raisers)
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''
