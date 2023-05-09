@@ -248,8 +248,8 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def query_score(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
-        CDB api doc page.
+        Get just the score for this position (which is the bestmove's score). If in doubt, just use `query_all`.
+        See also the CDB api doc page.
 
         json looks like: `{'status': 'ok', 'eval': 109, 'ply': 1}` (guess what position that was Kappa)
 
@@ -259,11 +259,11 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     async def query_pv(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
-        Get "candidate" moves for this position, whatever that means. If in doubt, just use `query_all`. See also the
-        CDB api doc page.
+        Get CDB's current principal variation (best guess of perfect play) for this position.
+        See also the CDB api doc page.
 
-        json looks like: `{'status': 'ok', 'score': 109, 'depth': 41, 'pv': ['d7d5', 'h2h3', ...]}` (seriously it should
-        be immediately obvious what position this is lol)
+        json looks like: `{'status': 'ok', 'score': 109, 'depth': 41, 'pv': ['d7d5', 'h2h3', ...]}`
+        (seriously it should be immediately obvious what position this is lol)
 
         returns a `CDBStatus` if the json status isn't success
         '''
