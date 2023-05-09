@@ -16,20 +16,21 @@
 #    See the LICENSE file for more details.
 
 '''
-This script reads a single PGN file, reads games into memory, finds all positions in the games, deduplicates, and does
-mass-queuing of them all. Parsing includes PVs shown in comments. Some game-skipping can be customized:
-
-args: pgnfile [start] [count] (optionally skip `start` games and process not more than `count`)
+This script reads a PGN file, reads games from that file into memory, finds all positions in the games (including PVs
+stored in comments), deduplicates the positions, and mass-queues the resulting unique positions. Although this accepts
+a list of filenames, each file is processed and deduplicated individually. (Note: queueing near-root positions can be
+quite expensive, so use this with caution. TODO: write a better form that does some queueing, some querying only)
 '''
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+import argparse
+import logging
+import math
 
 import trio
 import chess.pgn
 
-import logging
-import math
+from noobchessdbpy.api import AsyncCDBClient
+from noobchessdbpy.library import AsyncCDBLibrary
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -37,25 +38,28 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-async def parse_and_queue_pgn(filename, start=0, count=math.inf):
-    if start:
-        start = int(start)
-    if count is not math.inf:
-        count = int(count)
-
-    async with AsyncCDBLibrary() as lib:
-        with open(filename) as filehandle:
-            #all_positions = lib.parse_pgn(filehandle, start=100, count=100)
-            all_positions = lib.parse_pgn(filehandle, start, count)
-        n = len(all_positions)
-        print(f"now mass queueing {n} positions")
-        await lib.mass_queue(all_positions)
-        print(f"all {n} positions have been queued for analysis")
+async def parse_and_queue_pgn(args):
+    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
+        for filename in args.filenames:
+            with open(filename) as filehandle:
+                all_positions = lib.parse_pgn(filehandle, args.start, args.count)
+            n = len(all_positions)
+            print(f"now mass queueing {n} positions")
+            await lib.mass_queue(all_positions)
+            print(f"all {n} positions have been queued for analysis")
 
 
 if __name__ == '__main__':
-    from sys import argv
-    args = argv[1:]
-    if not args:
-        raise ValueError('args: pgnfile [start] [count] (optionally skip `start` games and process not more than `count`)')
-    trio.run(parse_and_queue_pgn, *args)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('filenames', nargs='+',
+                        help="""A list of filenames to read PGN from. Each is processed and deduplicated individually;
+                             to deduplicate everything, cat them all into one file.""")
+    parser.add_argument('-l', '--count', '--limit-count', type=int, default=math.inf,
+                        help='the maximum number of games to process from each file')
+    parser.add_argument('-s', '--start', type=int, default=0,
+                        help='the number of games to skip from the beginning of each file')
+    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
+                                                         help="maximum number of parallel requests (default: %(default)s)")
+
+    args = parser.parse_args()
+    trio.run(parse_and_queue_pgn, args)
