@@ -23,7 +23,7 @@ Then mass-queue the cross-deduplicated positions into CDB.
 does only some queueing, and some querying instead)
 Note: queue order is arbitrary.
 
-(One can also queue PGN by pasting PGN games directly on the command line, see queue_pgn.py)
+(One can also queue PGN by pasting PGN games directly on the command line, see queue_pgn_args.py)
 '''
 
 import argparse

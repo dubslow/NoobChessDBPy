@@ -29,7 +29,7 @@ single arg'
 This is useful for e.g. pasting TCEC PVs (players or kibitzers) for queueing. One can paste the game moves, two players'
 PV pgn and two kibitzers' PV pgn, for a total of 5 arguments to this script, which will all be queued in parallel (less
 than a second for hundreds of positions). In other words, live TCEC data can be queued into CDB just as fast as you can
-copy and paste it. (To queue from files, see parse_and_queue_pgn.py.)
+copy and paste it. (To queue from files, see queue_pgn_files.py.)
 '''
 
 import argparse
