@@ -17,13 +17,13 @@
 
 '''
 This script reads PGN files, one at a time: read games from one file into memory, find all positions in the games
-(including PVs stored in comments), deduplicate the positions, rinse and repeat, then cross-deduplicate from all files.
-Then mass-queue the cross-deduplicated positions into CDB.
+(including variations and PVs stored in comments), deduplicate the positions, rinse and repeat, and cross-deduplicate
+between all files. Then mass-queue the cross-deduplicated positions into CDB.
 (Note: queueing near-root positions can be quite expensive, so use this with caution. TODO: write a better form that
 does only some queueing, and some querying instead)
 Note: queue order is arbitrary.
 
-(One can also queue PGN by pasting PGN games directly on the command line, see queue_pgn_args.py)
+(One can also queue lines by pasting PGN directly on the command line, see queue_lines.py)
 '''
 
 import argparse

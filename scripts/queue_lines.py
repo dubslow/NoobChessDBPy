@@ -16,9 +16,9 @@
 #    See the LICENSE file for more details.
 
 '''
-This script reads PGN games directly from command line arguments, and mass-queues whatever it sees in parallel.
+This script reads games directly from command line arguments, and mass-queues the main line in parallel.
 
-PGN games can be pasted into a single argument by using bash's multiline string quoting syntax:
+PGN (SAN) can be pasted into a single argument by using bash's multiline string quoting syntax:
 
 $'this is
 a multiline
@@ -26,10 +26,13 @@ single arg'
 
 (see e.g. https://stackoverflow.com/a/25941527/1497645)
 
-This is useful for e.g. pasting TCEC PVs (players or kibitzers) for queueing. One can paste the game moves, two players'
-PV pgn and two kibitzers' PV pgn, for a total of 5 arguments to this script, which will all be queued in parallel (less
-than a second for hundreds of positions). In other words, live TCEC data can be queued into CDB just as fast as you can
-copy and paste it. (To queue from files, see queue_pgn_files.py.)
+Pasting SAN alone works, and is assumed to be from the startpos. Pasting PGN headers also works, including non-startpos
+positions from which to read SAN (such as in TCEC PVs copied out of the TCEC GUI).
+
+This is useful for e.g. pasting TCEC PVs (players or kibitzers) for queueing. One can paste the game moves, the two
+players' PV pgn and the two kibitzers' PV pgn, for a total of 5 arguments to this script, which will all be queued in
+parallel (less than a second for hundreds of positions). In other words, live TCEC data can be queued into CDB just as
+fast as you can copy and paste it. (To queue all variations from a PGN-game, see queue_pgn.py.)
 '''
 
 import argparse
@@ -64,6 +67,6 @@ async def queue_single_line(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('pgns', nargs='+',
-                help="a set of pasted PGN games to queue. Use bash $'' quoting to enable a multi-line single argument.")
+               help="a set of pasted lines (PGN) to queue. Use bash $'' quoting to enable a multiline single argument.")
     args = parser.parse_args()
     trio.run(queue_single_line, args)
