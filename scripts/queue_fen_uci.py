@@ -17,25 +17,25 @@
 
 '''
 parses "fen ucimove ucimove ucimove" directly from cmdline args, no string quoting required
-useful for pasting ad hoc fen + ucimove inputs, e.g. your local engine output
+useful for pasting ad hoc FEN + UCI move inputs, e.g. your local engine output (the `moves` UCI token is optional)
 
-if you already have pgn, try pasting it to queue_single_line.py
-                          or reading it from file with parse_and_queue_pgn.py
+if you already have pgn, try pasting it to queue_lines.py or reading it from file with queue_pgn.py
 
 example:
 
 python queue_fen_uci.py 6k1/2B3p1/p1b4p/2b5/P1p1p3/2Nn3P/1PR3PK/8 w - - 5 35 a4a5 g7g5 c2e2 d3c1 e2e1 c1d3 e1f1 c5f2 c7d6 g8g7 d6e5 g7g8 e5c7 f2d4 c7b6 d4e5 h2g1 d3f4 g1f2 h6h5 g2g3 f4d3 f2e3 e5g3 f1f6 c6b7 b6d4 g3f4 e3e2
-parsed 30 moves from cmdline
+parsed 30 positions from cmdline
 completed 30 queues
 '''
 
-from noobchessdbpy.library import AsyncCDBLibrary
-
-import trio
-import chess.pgn
-
+import argparse
 from io import StringIO
 import logging
+
+import chess.pgn
+import trio
+
+from noobchessdbpy.library import AsyncCDBLibrary
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -43,9 +43,10 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+
 def parse_fen_uci(args) -> list[chess.Board]:
     '''
-    parses "fen ['moves'] ucimove ucimove ucimove" directly from cmdline args (word 'moves' is optional)
+    parses "fen ['moves'] ucimove ucimove ucimove" directly from cmdline args (token 'moves' is optional)
     returns list of boards to queue
     useful for pasting engine pv output directly into a queue command
     '''
@@ -53,7 +54,7 @@ def parse_fen_uci(args) -> list[chess.Board]:
     args = args[6:]
     if args[0] == 'moves':
         args = args[1:]
-    board = chess.Board(fen=fen)
+    board = chess.Board(fen)
     lst = [board.copy(stack=False)]
     for uci in args:
         board.push_uci(uci)
@@ -62,7 +63,7 @@ def parse_fen_uci(args) -> list[chess.Board]:
 
 async def queue_line(args):
     line = parse_fen_uci(args)
-    print(f"parsed {len(line)} moves from cmdline")
+    print(f"parsed {len(line)} positions from cmdline")
     async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
         n = 0
         for board in line:
@@ -72,8 +73,7 @@ async def queue_line(args):
 
 
 if __name__ == '__main__':
-    from sys import argv
-    args = argv[1:]
-    if not args:
-        raise ValueError('pass some FEN dumbdumb')
-    trio.run(queue_line, args)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('fen_and_moves', nargs='+', help="fen and UCI moves (unquoted)")
+    args = parser.parse_args()
+    trio.run(queue_line, args.fen_and_moves)

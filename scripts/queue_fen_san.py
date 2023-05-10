@@ -17,25 +17,25 @@
 
 '''
 parses "fen san san san" directly from cmdline args, no string quoting required
-useful for pasting ad hoc fen + san inputs, e.g. sesse output
+useful for pasting ad hoc FEN + SAN inputs, e.g. sesse PV outputs
 
-if you already have pgn, try pasting it to queue_single_line.py
-                          or reading it from file with parse_and_queue_pgn.py
+if you already have pgn, try pasting it to queue_lines.py or reading it from file with queue_pgn.py
 
 example:
 
 python queue_fen_san.py 6k1/2B3p1/p1b4p/2b5/P1p1p3/2Nn3P/1PR3PK/8 w - - 5 35 35. a5 h5 36. Bb6 Be7 37. Kg1 Bf6 38. Re2 Nf4 39. Re1 h4 40. Ne2 g5 41. Nc3 e3 42. Rxe3 Bxg2 43. Ne2 Kf7 44. Nxf4 gxf4 45. Re1 Bxh3 46. Re4 Bxb2 47. Rxf4+ Ke6 48. Rxc4 Kd5 49. Rxh4 Bd7 50. Kf2 Bf6 51. Rh6 Bb2 52. Rh7 Bb5 53. Rh4 Bf6 54. Rf4 Bb2 55. Kf3 Bg7 56. Rf7 Bb2 57. Rc7 Ba3 58. Rc8 Bb4 59. Ke3 Ba3 60. Kd2 Bd7
-parsed 52 moves from cmdline
+parsed 52 positions from cmdline
 completed 52 queues
 '''
 
-from noobchessdbpy.library import AsyncCDBLibrary
-
-import trio
-import chess.pgn
-
+import argparse
 from io import StringIO
 import logging
+
+import chess.pgn
+import trio
+
+from noobchessdbpy.library import AsyncCDBLibrary
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -57,14 +57,13 @@ def parse_fen_san(args) -> str:
 async def queue_line(args):
     pgnstr = parse_fen_san(args)
     pgn = chess.pgn.read_game(StringIO(pgnstr))
-    print(f"parsed {len(list(pgn.mainline()))} moves from cmdline")
+    print(f"parsed {len(list(pgn.mainline()))} positions from cmdline")
     async with AsyncCDBLibrary() as lib:
         await lib.queue_single_line(pgn)
 
 
 if __name__ == '__main__':
-    from sys import argv
-    args = argv[1:]
-    if not args:
-        raise ValueError('pass some FEN dumbdumb')
-    trio.run(queue_line, args)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('fen_and_moves', nargs='+', help="fen and SAN moves (unquoted)")
+    args = parser.parse_args()
+    trio.run(queue_line, args.fen_and_moves)
