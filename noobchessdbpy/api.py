@@ -306,7 +306,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         Use this to reset your IP addr's daily request limit.
         '''
-        return await self._base_no_retval(board, raisers=raisers, **kwargs, action='clearlimit')
+        return await self._base_no_retval(**kwargs, action='clearlimit')
 
     ####################################################################################################################
 
