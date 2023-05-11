@@ -99,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                         help="maximum number of parallel requests (default: %(default)s)")
+                                                      help="maximum number of parallel requests (default: %(default)s)")
     from sys import argv
     parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
                         help="filename to write query results to (defaults to scriptname.txt)")

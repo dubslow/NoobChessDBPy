@@ -300,22 +300,42 @@ class AsyncCDBLibrary(AsyncCDBClient):
         print(f"after deduplication, found {unique} unique positions from {x} total, {unique/x:.2%} unique rate")
         return all_positions, x # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
+    ####################################################################################################################
 
-    async def mass_queue(self, all_positions:set[str]):
+    async def mass_queue(self, all_positions:Iterable[chess.Board]):
         '''
-        Pretty much what the interface suggests. Given a collection of positions, queue them all into the DB as fast as
+        Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
         possible. Better hope you don't get rate limited lol
+
+        Note: consumes the given set, upon return the set should be empty
+        '''
+        await self.mass_request(self.queue, self._iterable_reader, all_positions)
+
+    @staticmethod
+    async def _iterable_reader(send_taskqueue:trio.MemorySendChannel, iterable):
+        n = 0
+        async with send_taskqueue:
+            for board in iterable:
+                await send_taskqueue.send(board)
+                n += 1
+                if n & 0x7FF == 0:
+                    print(f"taskqueued {n} requests")
+
+    async def mass_queue_set(self, all_positions:set[str]):
+        '''
+        Pretty much what the interface suggests. Given a set of positions (FEN strings), queue them all into the DB as
+        fast as possible. Better hope you don't get rate limited lol
 
         Note: consumes the given set, upon return the set should be empty
         '''
         await self.mass_request(self.queue, self._set_reader, all_positions)
 
     @staticmethod
-    async def _set_reader(send_taskqueue:trio.MemorySendChannel, _set):
+    async def _set_reader(send_taskqueue:trio.MemorySendChannel, fenset):
         n = 0
         async with send_taskqueue:
-            while _set: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
-                await send_taskqueue.send(chess.Board(fen=_set.pop()))
+            while fenset: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
+                await send_taskqueue.send(chess.Board(fenset.pop()))
                 n += 1
                 if n & 0x7FF == 0:
                     print(f"taskqueued {n} requests")

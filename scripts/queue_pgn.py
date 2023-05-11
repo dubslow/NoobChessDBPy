@@ -55,7 +55,7 @@ async def parse_and_queue_pgn(args):
             print(f"""after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} total,\
  {u/n if n else math.nan:.2%} unique rate""")
         print(f"now mass queueing {u} positions")
-        await lib.mass_queue(all_positions)
+        await lib.mass_queue_set(all_positions)
         print(f"all {u} positions have been queued for analysis")
 
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--start', type=int, default=0,
                         help='the number of games to skip from the beginning of each file')
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                         help="maximum number of parallel requests (default: %(default)s)")
+                                                      help="maximum number of parallel requests (default: %(default)s)")
 
     args = parser.parse_args()
     trio.run(parse_and_queue_pgn, args)

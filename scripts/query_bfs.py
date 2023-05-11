@@ -65,7 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
                 help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                         help="maximum number of parallel requests (default: %(default)s)")
+                                                      help="maximum number of parallel requests (default: %(default)s)")
     parser.add_argument('-o', '--output', help="filename to append query results to")
 
     args = parser.parse_args()
