@@ -24,12 +24,11 @@ to paste just one such line into a command, see queue_fen_uci.py; if you have PG
 '''
 
 import argparse
-from io import StringIO
 import logging
+from typing import Iterable
 
 import chess.pgn
 import trio
-from typing import Iterable
 
 from noobchessdbpy.library import AsyncCDBClient, AsyncCDBLibrary
 
