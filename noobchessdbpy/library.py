@@ -306,8 +306,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
         '''
         Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
         possible. Better hope you don't get rate limited lol
-
-        Note: consumes the given set, upon return the set should be empty
         '''
         await self.mass_request(self.queue, self._iterable_reader, all_positions)
 
