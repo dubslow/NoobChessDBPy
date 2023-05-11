@@ -16,7 +16,7 @@
 #    See the LICENSE file for more details.
 
 '''
-reads a list of `info depth ... pv ucimove ucimove ucimove ...` from a list of files for mass queueing (deduplicates)
+reads a list of `info depth ... pv ucimove ucimove ucimove ...` from a list of files for mass queueing, after deduplicating
 
 (doesn't read fen from the `position` command.... TODO)
 
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('filenames', nargs='+', help="A list of filenames to read UCI output from.")
     parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
-          help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
+                            help="the FEN which is the root of the PV lines in the files (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                       help="maximum number of parallel requests (default: %(default)s)")
     args = parser.parse_args()
