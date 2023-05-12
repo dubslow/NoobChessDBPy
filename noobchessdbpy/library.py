@@ -345,4 +345,80 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 if n & 0x3F == 0:
                     print(f"taskqueued {n} requests", end='\r')
 
+    ####################################################################################################################
+
+    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=20) -> ?:
+        # Circluar memory channels. Determing when we're all done is a bit tricky: it's when both channels are empty
+        # with all users of both channels idle.
+        send_request, recv_request = trio.open_memory_channel(self.concurrency)
+        send_results, recv_results = trio.open_memory_channel(self.concurrency)
+        mutually_complete = trio.Event() # Do I even need this rather than a simple bool?
+        done_fens = set() # gotta be sure to not needlessly double up
+        check_idle = lambda channel:     (stats := channel.statistics).current_buffer_used <= 0
+                                     and stats.tasks_waiting_receive == stats.open_receive_channels
+            
+        # Not thread safe to refer to variables outside the nursery scope (so to speak)
+        with trio.open_nursery() as nursery:
+            for i in range(self.concurrency):
+                nursery.start_soon(self._cdb_iterate_requester, mutually_complete, recv_request.clone(),
+                                                                                   send_results.clone())
+            recv_request.close(); send_results.close() # ensure that there are only as many channels as workers using them
+
+            await send_request.send(self.query_all, rootboard)
+            print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
+
+            # Now we act as the "producer", processing request results and sending more requests, loop control TBD
+            async with send_request, recv_results:
+                while not (check_idle(recv_request) and check_idle(recv_results)):
+                    api_call, board, result = await recv_results.receive()
+                    fen = board.fen()
+                    if api_call is not self.query_all or fen in done_fens: # Ignore queue results (board.fen() remains expensive)
+                        continue
+                    visitor(result, cp_margin, send_request)
+                    done_fens.add(fen)
+                    for move in moves:
+                        if move['score'] > score_margin:
+                            child = board.copy(stack=False)
+                            child.push_uci(move['uci'])
+                            await send_request.send(self.query_all, child)
+                        else:
+                            break
+            mutually_complete.set()
+                
+    def cdb_explore_visitor(self, json, cp_margin, send_request):
+        '''
+        By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
+        existing moves seem unclear. (But dont iterate into TB/mate scores)
+        '''
+        if cp_margin > 200: # TODO: is this too low? am i too paranoid?
+            raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
+        moves = json['moves']
+        score = moves[0]['score']
+        if abs(score) > 29000:
+            return
+        # First, for "unclear" positions, add a queue or manually explore all moves
+        score_margin = score - cp_margin
+        worst_near_margin = (moves[-1]['score'] > score_margin)
+        if len(moves) >= 5 and worst_near_margin: # with small margin, this is highly unlikely, but with large margin...
+            for child in board.legal_child_boards():
+                await send_request.send(self.queue, child)
+                return
+        elif len(moves) < 10 or worst_near_margin: # For unclear moves, but less unclear than the first condition
+            await send_request.send(self.queue, board) # not sure if this is truly beneficial given that we traverse anyways
+        
+
+    @staticmethod
+    async def _cdb_iterate_requester(mutually_complete:trio.Event, recv_request:trio.MemorySendChannel,
+                                                                   send_results:trio.MemoryReceiveChannel):
+        async with recv_request, send_results:
+            while not mutually_complete.is_set(): # not thread safe
+                api_call, board = await recv_request.receive()
+                result = await api_call(board)
+                await send_results.send((api_call, board, result))
+
+
+
+
+
+
 
