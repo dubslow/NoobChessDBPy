@@ -297,7 +297,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
             print(f"in game {i} found {m} nodes, {n} positions")
             x += n
         unique = len(all_positions)
-        print(f"after deduplication, found {unique} unique positions from {x} total, {unique/x:.2%} unique rate")
+        print(f"after deduplicating {filehandle.name}, found {unique} unique positions "
+              f"from {x} total, {unique/x:.2%} unique rate")
         return all_positions, x # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
     ####################################################################################################################
