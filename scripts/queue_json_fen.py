@@ -45,6 +45,7 @@ logging.basicConfig(
 async def parse_and_queue_pgn(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
         all_positions, n, u_sub = set(), 0, 0
+        print(f"reading from {args.filenames} ...")
         for i, filename in enumerate(args.filenames):
             with open(filename) as filehandle:
                 jfens = json.loads(filehandle.read())
@@ -59,9 +60,7 @@ async def parse_and_queue_pgn(args):
             if i > 0:
                 print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} "
                       f"total, {u/n if n else math.nan:.2%} unique rate")
-        print(f"now mass queueing {u} positions")
         await lib.mass_queue_set(all_positions)
-        print(f"all {u} positions have been queued for analysis")
 
 
 if __name__ == '__main__':

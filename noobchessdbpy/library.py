@@ -81,14 +81,14 @@ class BreadthFirstState:
                 # surprisingly (to me at least), pre-filtering for duplicates here doesn't do much of anything
                 # altho even a little something might be a benefit when 1M nodes deep
                 self.queue.extend(filter(lambda f: f not in self.seen, self.board.legal_child_fens(stack=False)))
-                if self.n & 0x7FF == 0: print(f"bfs: {self.n=} relative ply {self.board.ply() - self.rootply}") #{self.d=} {self.d/self.n=:.2%}")
+                if self.n & 0x3F == 0: print(f"bfs: {self.n=} relative ply {self.board.ply() - self.rootply}", end='\r') #{self.d=} {self.d/self.n=:.2%}")
                 self.seen.add(self.fen)
                 yield self.board
             else:
                 self.d += 1
             self.fen = self.queue.popleft()
             self.board = chess.Board(self.fen)
-        print(f"finished bfs iter at {n=}, relative ply {self.board.ply() - self.rootply}")
+        print(f"\nfinished bfs iter at {n=}, relative ply {self.board.ply() - self.rootply}")
 
     def relative_ply(self):
         return self.board.ply() - self.rootply
@@ -308,7 +308,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
         Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
         possible. Better hope you don't get rate limited lol
         '''
+        u = len(all_positions)
+        print(f"now mass queueing {u} positions")
         await self.mass_request(self.queue, self._iterable_reader, all_positions)
+        print(f"\nall {u} positions have been queued for analysis")
 
     @staticmethod
     async def _iterable_reader(send_taskqueue:trio.MemorySendChannel, iterable):
@@ -317,8 +320,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
             for board in iterable:
                 await send_taskqueue.send(board)
                 n += 1
-                if n & 0x7FF == 0:
-                    print(f"taskqueued {n} requests")
+                if n & 0x3F == 0:
+                    print(f"taskqueued {n} requests", end='\r')
 
     async def mass_queue_set(self, all_positions:set[str]):
         '''
@@ -327,7 +330,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         Note: consumes the given set, upon return the set should be empty
         '''
+        u = len(all_positions)
+        print(f"now mass queueing {u} positions")
         await self.mass_request(self.queue, self._set_reader, all_positions)
+        print(f"\nall {u} positions have been queued for analysis")
 
     @staticmethod
     async def _set_reader(send_taskqueue:trio.MemorySendChannel, fenset):
@@ -336,7 +342,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             while fenset: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
                 await send_taskqueue.send(chess.Board(fenset.pop()))
                 n += 1
-                if n & 0x7FF == 0:
-                    print(f"taskqueued {n} requests")
+                if n & 0x3F == 0:
+                    print(f"taskqueued {n} requests", end='\r')
 
 
