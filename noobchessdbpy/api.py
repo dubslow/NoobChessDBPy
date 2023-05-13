@@ -170,7 +170,19 @@ class AsyncCDBClient(httpx.AsyncClient):
         params['action'] = action
         #print(params)
 
-        resp = await self.get(url=_CDBURL, params=params)
+        num_retries = 3
+        for i in reversed(range(num_retries)):
+            try:
+                resp = await self.get(url=_CDBURL, params=params)
+                resp.raise_for_status()
+            except httpx.HTTPError as e:
+                if i == 0:
+                    raise e
+                else:
+                    print(f"\ncaught HTTP error for {board=}:\n{err}\nretrying, have {i} retries left, waiting 20s...")
+                    await trio.sleep(20)
+            else: # success, no more retrying
+                break
         #print(resp, resp.json())
         return resp.json()
 
