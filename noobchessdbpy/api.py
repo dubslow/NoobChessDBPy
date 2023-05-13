@@ -175,9 +175,9 @@ class AsyncCDBClient(httpx.AsyncClient):
             try:
                 resp = await self.get(url=_CDBURL, params=params)
                 resp.raise_for_status()
-            except httpx.HTTPError as e:
+            except httpx.HTTPError as err:
                 if i == 0:
-                    raise e
+                    raise err
                 else:
                     print(f"\ncaught HTTP error for {board=}:\n{err}\nretrying, have {i} retries left, waiting 20s...")
                     await trio.sleep(20)
