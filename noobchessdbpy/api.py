@@ -383,5 +383,9 @@ class AsyncCDBClient(httpx.AsyncClient):
                 collector.append(val)
 
 
-
+def _strip_fen(fen:str):
+    parts = fen.split()
+    if len(parts) != 6:
+        raise ValueError(f"found fen with other than 6 fields: {fen}")
+    return ' '.join(parts[:4])
         

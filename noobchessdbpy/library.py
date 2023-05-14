@@ -37,7 +37,7 @@ import chess.pgn
 import trio
 from trio.lowlevel import checkpoint
 
-from .api import AsyncCDBClient, CDBStatus
+from .api import AsyncCDBClient, CDBStatus, _strip_fen
 from . import chess_extensions
 
 ########################################################################################################################
@@ -352,28 +352,26 @@ class AsyncCDBLibrary(AsyncCDBClient):
         # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
         # *and* there's no further results for the main task to process.
         send_request, recv_request = trio.open_memory_channel(self.concurrency)
-        send_results, recv_results = trio.open_memory_channel(self.concurrency)
+        send_results, recv_results = trio.open_memory_channel(math.inf) # sigh lol
         queued_fens, queried_fens = set(), set() # gotta be sure to not needlessly double up
         channels_idle = lambda recv_request, recv_results: (
                                 (stats := recv_request.statistics()).tasks_waiting_receive == stats.open_receive_channels
                             and recv_results.statistics().current_buffer_used <= 0)
         # channel data are (api_call, (args*)) or (api_call, (results*))
         async def make_request(call, args): # little helper closure
-            #print("sending", call.__name__)
-            fen = args[0].fen()
+            fen = _strip_fen(args[0].fen())
             if call == self.query_all:
                 if fen in queried_fens:
                     return
                 queried_fens.add(fen)
             elif call == self.queue:
-                #print(len(queued_fens))
                 if fen in queued_fens:
-                    print("duASDFASDFASDFASDFAplicate fen queueAFDSOJAFDSLAFDSIHAFSDO######################################################IHFSDAIOHFDASIHOAFDSIOHSDFAIOHSFAD")
                     return
                 queued_fens.add(fen)
             await send_request.send((call, args))
         all_results = {} # get that yucky global feeling again
         n = s = qa = b = 0
+        baseply = rootboard.ply()
             
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
         async with trio.open_nursery() as nursery:
@@ -385,9 +383,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
-            async with send_request, recv_results:
+            try: 
+             async with send_request, recv_results:
                 while True:
-                    print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
+                    #print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
                     await checkpoint() # Necessary to get an accurate check below, but I'm not yet convinced that this is sufficient.
                     if channels_idle(recv_request, recv_results):
                         break
@@ -403,7 +402,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     qa += 1#print("processing queryall result")
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, board, result, cp_margin, make_request)
+                    vres = await visitor(self, board, result, cp_margin, make_request, baseply)
                     if vres:
                         all_results[fen] = vres
                     if not isinstance(result, dict):
@@ -419,17 +418,19 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         if move['score'] >= score_margin:
                             child = board.copy(stack=True)
                             child.push_uci(move['uci'])
-                            print(f"iterating into {move['san']}")
+                            #print(f"iterating into {move['san']}")
                             await make_request(self.query_all, (child,))
                             b += 1
                         else:
                             break
-            print(f"finished, made {n} requests of which {qa} were query_all of which {s} were stems which had total {b}"
+            except KeyboardInterrupt:
+                pass
+            print(f"\nfinished, made {n} requests of which {qa} were query_all of which {s} were stems which had total {b}"
                   f" branches for branching factor {b/s:.2f}; the visitor returned {len(all_results)} results")
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def cdb_explore_visitor(self, board, result, cp_margin, make_request):
+    async def cdb_explore_visitor(self, board, result, cp_margin, make_request, baseply):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
@@ -445,7 +446,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         moves = result['moves']
         score = moves[0]['score']
-        print(f"have results for {board.safe_peek()}: "
+        relply = board.ply() - baseply
+        print(f"have results for {relply=} {score=} {board.fen()}: \t"
               f'''{", ".join(f"{move['san']}={move['score']}" for move in moves)}''')
         if abs(score) > 19000:
             return
