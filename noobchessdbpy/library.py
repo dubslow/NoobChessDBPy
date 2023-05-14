@@ -353,7 +353,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         # *and* there's no further results for the main task to process.
         send_request, recv_request = trio.open_memory_channel(self.concurrency)
         send_results, recv_results = trio.open_memory_channel(self.concurrency)
-        done_fens = set() # gotta be sure to not needlessly double up
+        queued_fens, queried_fens = set(), set() # gotta be sure to not needlessly double up
         channels_idle = lambda recv_request, recv_results: (
                                 (stats := recv_request.statistics()).tasks_waiting_receive == stats.open_receive_channels
                             and recv_results.statistics().current_buffer_used <= 0)
@@ -361,8 +361,17 @@ class AsyncCDBLibrary(AsyncCDBClient):
         async def make_request(call, args): # little helper closure
             #print("sending", call.__name__)
             fen = args[0].fen()
-            if fen not in done_fens:
-                await send_request.send((call, args))
+            if call == self.query_all:
+                if fen in queried_fens:
+                    return
+                queried_fens.add(fen)
+            elif call == self.queue:
+                #print(len(queued_fens))
+                if fen in queued_fens:
+                    print("duASDFASDFASDFASDFAplicate fen queueAFDSOJAFDSLAFDSIHAFSDO######################################################IHFSDAIOHFDASIHOAFDSIOHSDFAIOHSFAD")
+                    return
+                queued_fens.add(fen)
+            await send_request.send((call, args))
         all_results = {} # get that yucky global feeling again
         n = s = qa = b = 0
             
@@ -378,7 +387,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
             async with send_request, recv_results:
                 while True:
-                    #print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
+                    print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
                     await checkpoint() # Necessary to get an accurate check below, but I'm not yet convinced that this is sufficient.
                     if channels_idle(recv_request, recv_results):
                         break
@@ -388,9 +397,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     n += 1
                     board = args[0]
                     fen = board.fen() # this call is still expensive...
-                    print("processing result:", api_call.__name__, board.safe_peek())
-                    if api_call != self.query_all or fen in done_fens: # https://stackoverflow.com/a/15977850/1497645
-                        # Ignore queue/duplicate results
+                    #print("processing result:", api_call.__name__, board.safe_peek(), fen)
+                    if api_call != self.query_all: # https://stackoverflow.com/a/15977850/1497645
                         continue
                     qa += 1#print("processing queryall result")
 
@@ -398,7 +406,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     vres = await visitor(self, board, result, cp_margin, make_request)
                     if vres:
                         all_results[fen] = vres
-                    done_fens.add(fen)
                     if not isinstance(result, dict):
                         continue
 
