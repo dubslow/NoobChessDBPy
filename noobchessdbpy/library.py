@@ -35,6 +35,7 @@ from typing import Iterable
 import chess
 import chess.pgn
 import trio
+from trio.lowlevel import checkpoint
 
 from .api import AsyncCDBClient, CDBStatus
 from . import chess_extensions
@@ -347,77 +348,127 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=20) -> ?:
-        # Circluar memory channels. Determing when we're all done is a bit tricky: it's when both channels are empty
-        # with all users of both channels idle.
+    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=20) -> dict:
+        # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
+        # *and* there's no further results for the main task to process.
         send_request, recv_request = trio.open_memory_channel(self.concurrency)
         send_results, recv_results = trio.open_memory_channel(self.concurrency)
-        mutually_complete = trio.Event() # Do I even need this rather than a simple bool?
         done_fens = set() # gotta be sure to not needlessly double up
-        check_idle = lambda channel:     (stats := channel.statistics).current_buffer_used <= 0
-                                     and stats.tasks_waiting_receive == stats.open_receive_channels
+        channels_idle = lambda recv_request, recv_results: (
+                                (stats := recv_request.statistics()).tasks_waiting_receive == stats.open_receive_channels
+                            and recv_results.statistics().current_buffer_used <= 0)
+        # channel data are (api_call, (args*)) or (api_call, (results*))
+        async def make_request(call, args): # little helper closure
+            #print("sending", call.__name__)
+            fen = args[0].fen()
+            if fen not in done_fens:
+                await send_request.send((call, args))
+        all_results = {} # get that yucky global feeling again
+        n = s = qa = b = 0
             
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
-        with trio.open_nursery() as nursery:
-            for i in range(self.concurrency):
-                nursery.start_soon(self._cdb_iterate_requester, mutually_complete, recv_request.clone(),
-                                                                                   send_results.clone())
-            recv_request.close(); send_results.close() # ensure that there are only as many channels as workers using them
-
-            await send_request.send(self.query_all, rootboard)
+        async with trio.open_nursery() as nursery:
+            async with recv_request, send_results: # close the originals to ensure that only channels in use are open
+                for i in range(self.concurrency):
+                    nursery.start_soon(self._cdb_iterate_requester, recv_request.clone(), send_results.clone(), i)
+            #print("blah:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
+            await make_request(self.query_all, (rootboard,))
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
             async with send_request, recv_results:
-                while not (check_idle(recv_request) and check_idle(recv_results)):
-                    api_call, board, result = await recv_results.receive()
-                    fen = board.fen()
-                    if api_call is not self.query_all or fen in done_fens: # Ignore queue results (board.fen() remains expensive)
+                while True:
+                    #print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
+                    await checkpoint() # Necessary to get an accurate check below, but I'm not yet convinced that this is sufficient.
+                    if channels_idle(recv_request, recv_results):
+                        break
+                    # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking in the next line
+                    #print("looped:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
+                    api_call, args, result = await recv_results.receive()
+                    n += 1
+                    board = args[0]
+                    fen = board.fen() # this call is still expensive...
+                    print("processing result:", api_call.__name__, board.safe_peek())
+                    if api_call != self.query_all or fen in done_fens: # https://stackoverflow.com/a/15977850/1497645
+                        # Ignore queue/duplicate results
                         continue
-                    visitor(result, cp_margin, send_request)
+                    qa += 1#print("processing queryall result")
+
+                    # result may still be json or a CDBStatus, give the visitor a chance to act on that
+                    vres = await visitor(self, board, result, cp_margin, make_request)
+                    if vres:
+                        all_results[fen] = vres
                     done_fens.add(fen)
-                    for move in moves:
-                        if move['score'] > score_margin:
-                            child = board.copy(stack=False)
+                    if not isinstance(result, dict):
+                        continue
+
+                    # having given the visitor its chance, now we iterate
+                    score = result['moves'][0]['score']
+                    if abs(score) > 19000:
+                        return
+                    score_margin = score - cp_margin
+                    s += 1
+                    for move in result['moves']:
+                        if move['score'] >= score_margin:
+                            child = board.copy(stack=True)
                             child.push_uci(move['uci'])
-                            await send_request.send(self.query_all, child)
+                            print(f"iterating into {move['san']}")
+                            await make_request(self.query_all, (child,))
+                            b += 1
                         else:
                             break
-            mutually_complete.set()
-                
-    def cdb_explore_visitor(self, json, cp_margin, send_request):
+            print(f"finished, made {n} requests of which {qa} were query_all of which {s} were stems which had total {b}"
+                  f" branches for branching factor {b/s:.2f}; the visitor returned {len(all_results)} results")
+        return all_results
+
+    @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
+    async def cdb_explore_visitor(self, board, result, cp_margin, make_request):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
         '''
         if cp_margin > 200: # TODO: is this too low? am i too paranoid?
             raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
-        moves = json['moves']
-        score = moves[0]['score']
-        if abs(score) > 29000:
+
+        if isinstance(result, CDBStatus):
+            #print("queryall no results")
+            if result not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
+                await make_request(self.queue, (board,))
             return
-        # First, for "unclear" positions, add a queue or manually explore all moves
-        score_margin = score - cp_margin
-        worst_near_margin = (moves[-1]['score'] > score_margin)
-        if len(moves) >= 5 and worst_near_margin: # with small margin, this is highly unlikely, but with large margin...
-            for child in board.legal_child_boards():
-                await send_request.send(self.queue, child)
-                return
-        elif len(moves) < 10 or worst_near_margin: # For unclear moves, but less unclear than the first condition
-            await send_request.send(self.queue, board) # not sure if this is truly beneficial given that we traverse anyways
+
+        moves = result['moves']
+        score = moves[0]['score']
+        print(f"have results for {board.safe_peek()}: "
+              f'''{", ".join(f"{move['san']}={move['score']}" for move in moves)}''')
+        if abs(score) > 19000:
+            return
+        #worst_near_margin = moves[-1]['score'] >= (score - min(cp_margin, 50))
+        #if len(moves) > 5 and worst_near_margin: # with small margin, this is highly unlikely, but with large margin...
+        #    for move in board.legal_moves:
+        #        await make_request(self.store, (board, move))
+        #else:
+        await make_request(self.queue, (board,))
+        return result
         
-
     @staticmethod
-    async def _cdb_iterate_requester(mutually_complete:trio.Event, recv_request:trio.MemorySendChannel,
-                                                                   send_results:trio.MemoryReceiveChannel):
+    async def _cdb_iterate_requester(recv_request:trio.MemorySendChannel,
+                                     send_results:trio.MemoryReceiveChannel, j):
+        i=0
         async with recv_request, send_results:
-            while not mutually_complete.is_set(): # not thread safe
-                api_call, board = await recv_request.receive()
-                result = await api_call(board)
-                await send_results.send((api_call, board, result))
+            async for api_call, args in recv_request:
+                #print(f"{j=} {i=} GETting {api_call.__name__}...")
+                result = await api_call(*args)
+                #print(f"{j=} {i=} GOT {api_call.__name__}, sending result to main task...")
+                await send_results.send((api_call, args, result))
+                #print(f"{j=} {i=} now idling in for loop")
+                i+=1
 
-
-
+class CircularChannels:
+    '''
+    Abstract out the setup of a producer guiding requesters, but which also relies on the requester results to make
+    further requests. Useful for e.g. traversing CDB or indeed, say, Wikipedia article links. (6 degrees of separation?)
+    '''
+    pass # TODO (For now, minimum viable product, factoring is secondary to functioning
 
 
 

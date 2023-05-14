@@ -44,8 +44,15 @@ def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
         board.push_san(san)
         yield board.fen()
 
+def safe_peek(self):
+    try:
+        return self.peek()
+    except IndexError:
+        return None
+
 chess.Board.legal_child_fens   = legal_child_fens
 chess.Board.yield_fens_from_sans = yield_fens_from_sans
+chess.Board.safe_peek = safe_peek
 
 ########################################################################################################################
 # Manually add some more methods to chess.pgn.GameNode
