@@ -348,7 +348,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=20) -> dict:
+    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=5) -> dict:
         # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
         # *and* there's no further results for the main task to process.
         send_request, recv_request = trio.open_memory_channel(self.concurrency)
@@ -402,18 +402,22 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     qa += 1#print("processing queryall result")
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, board, result, cp_margin, make_request, baseply)
+                    vres = await visitor(self, board, result, cp_margin, make_request)
                     if vres:
                         all_results[fen] = vres
                     if not isinstance(result, dict):
                         continue
 
                     # having given the visitor its chance, now we iterate
+                    s += 1
+                    relply = board.ply() - baseply
                     score = result['moves'][0]['score']
+                    print(f"\rnodes={qa} stems={s} {relply=} {score=} {board.fen()}: \t"
+                          f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
                     if abs(score) > 19000:
                         return
                     score_margin = score - cp_margin
-                    s += 1
+
                     for move in result['moves']:
                         if move['score'] >= score_margin:
                             child = board.copy(stack=True)
@@ -425,12 +429,12 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             break
             except KeyboardInterrupt:
                 pass
-            print(f"\nfinished, made {n} requests of which {qa} were query_all of which {s} were stems which had total {b}"
-                  f" branches for branching factor {b/s:.2f}; the visitor returned {len(all_results)} results")
+            print(f"\nfinished. made {n} reqs, {qa} nodes, {s} stems, {b} branches,"
+                  f" branching factor {b/s:.2f}. the visitor returned {len(all_results)} results")
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def cdb_explore_visitor(self, board, result, cp_margin, make_request, baseply):
+    async def cdb_explore_visitor(self, board, result, cp_margin, make_request):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
@@ -446,9 +450,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         moves = result['moves']
         score = moves[0]['score']
-        relply = board.ply() - baseply
-        print(f"have results for {relply=} {score=} {board.fen()}: \t"
-              f'''{", ".join(f"{move['san']}={move['score']}" for move in moves)}''')
         if abs(score) > 19000:
             return
         #worst_near_margin = moves[-1]['score'] >= (score - min(cp_margin, 50))
