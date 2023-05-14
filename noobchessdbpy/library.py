@@ -362,19 +362,21 @@ class AsyncCDBLibrary(AsyncCDBClient):
             fen = _strip_fen(args[0].fen())
             if call == self.query_all:
                 if fen in queried_fens:
-                    return
+                    return False
                 queried_fens.add(fen)
             elif call == self.queue:
                 if fen in queued_fens:
-                    return
+                    return False
                 queued_fens.add(fen)
             await send_request.send((call, args))
+            return True
         all_results = {} # get that yucky global feeling again
-        n = s = qa = b = 0
+        n = s = qa = b = maxply = 0
         baseply = rootboard.ply()
-            
+
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
-        async with trio.open_nursery() as nursery:
+        try:
+         async with trio.open_nursery() as nursery:
             async with recv_request, send_results: # close the originals to ensure that only channels in use are open
                 for i in range(self.concurrency):
                     nursery.start_soon(self._cdb_iterate_requester, recv_request.clone(), send_results.clone(), i)
@@ -383,11 +385,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
-            try: 
-             async with send_request, recv_results:
+            async with send_request, recv_results:
                 while True:
                     #print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
-                    await checkpoint() # Necessary to get an accurate check below, but I'm not yet convinced that this is sufficient.
+                    await checkpoint() # Necessary? to get an accurate check below, but I'm not yet convinced that this is sufficient.
                     if channels_idle(recv_request, recv_results):
                         break
                     # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking in the next line
@@ -411,8 +412,9 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     # having given the visitor its chance, now we iterate
                     s += 1
                     relply = board.ply() - baseply
+                    maxply = max(relply, maxply)
                     score = result['moves'][0]['score']
-                    print(f"\rnodes={qa} stems={s} {relply=} {score=} {board.fen()}: \t"
+                    print(f"\rnodes={qa} stems={s} {relply=} {score=} todo={recv_results.statistics().current_buffer_used}: \t" # {board.fen()}
                           f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
                     if abs(score) > 19000:
                         return
@@ -423,14 +425,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             child = board.copy(stack=True)
                             child.push_uci(move['uci'])
                             #print(f"iterating into {move['san']}")
-                            await make_request(self.query_all, (child,))
-                            b += 1
+                            uniq = await make_request(self.query_all, (child,))
+                            b += 1 # use b to count the duplicates (b += uniq just results in qa-1)
                         else:
                             break
-            except KeyboardInterrupt:
-                pass
-            print(f"\nfinished. made {n} reqs, {qa} nodes, {s} stems, {b} branches,"
-                  f" branching factor {b/s:.2f}. the visitor returned {len(all_results)} results")
+        except KeyboardInterrupt:
+            pass
+        print(f"\nfinished. made {n} reqs, {qa} nodes, {s} stems (branching factor {qa/s:.2f}), duplicates {b-qa+1},"
+              f" seldepth {maxply}. the visitor returned {len(all_results)} results")
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
