@@ -358,7 +358,12 @@ class AsyncCDBLibrary(AsyncCDBClient):
                                 (stats := recv_request.statistics()).tasks_waiting_receive == stats.open_receive_channels
                             and recv_results.statistics().current_buffer_used <= 0)
         # channel data are (api_call, (args*)) or (api_call, (results*))
+        all_results = {} # get that yucky global feeling again
+        rs = rp = s = qa = d = todo = maxply = 0 # rs = requests sent, rp = requests processed, todo = queryalls
+        # sent but unprocessed, qa = qas processed, s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
+        baseply = rootboard.ply()
         async def make_request(call, args): # little helper closure
+            '''returns if request+board unique'''
             fen = _strip_fen(args[0].fen())
             if call == self.query_all:
                 if fen in queried_fens:
@@ -369,10 +374,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     return False
                 queued_fens.add(fen)
             await send_request.send((call, args))
+            nonlocal rs; rs += 1
             return True
-        all_results = {} # get that yucky global feeling again
-        n = s = qa = b = maxply = 0
-        baseply = rootboard.ply()
 
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
         try:
@@ -381,7 +384,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 for i in range(self.concurrency):
                     nursery.start_soon(self._cdb_iterate_requester, recv_request.clone(), send_results.clone(), i)
             #print("blah:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
-            await make_request(self.query_all, (rootboard,))
+            await make_request(self.query_all, (rootboard,)); todo += 1
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
@@ -394,13 +397,17 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking in the next line
                     #print("looped:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
                     api_call, args, result = await recv_results.receive()
-                    n += 1
+                    rp += 1
                     board = args[0]
                     fen = board.fen() # this call is still expensive...
                     #print("processing result:", api_call.__name__, board.safe_peek(), fen)
                     if api_call != self.query_all: # https://stackoverflow.com/a/15977850/1497645
                         continue
-                    qa += 1#print("processing queryall result")
+                    #print("processing queryall result")
+                    qa += 1; todo -= 1
+                    # we want the ply counters to include leaves, tho we only print on nonleaves
+                    relply = board.ply() - baseply
+                    maxply = max(relply, maxply)
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
                     vres = await visitor(self, board, result, cp_margin, make_request)
@@ -411,10 +418,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
                     # having given the visitor its chance, now we iterate
                     s += 1
-                    relply = board.ply() - baseply
-                    maxply = max(relply, maxply)
                     score = result['moves'][0]['score']
-                    print(f"\rnodes={qa} stems={s} {relply=} {score=} todo={recv_results.statistics().current_buffer_used}: \t" # {board.fen()}
+                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t" # {board.fen()}
                           f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
                     if abs(score) > 19000:
                         return
@@ -425,18 +430,22 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             child = board.copy(stack=True)
                             child.push_uci(move['uci'])
                             #print(f"iterating into {move['san']}")
-                            uniq = await make_request(self.query_all, (child,))
-                            b += 1 # use b to count the duplicates (b += uniq just results in qa-1)
+                            unique = await make_request(self.query_all, (child,))
+                            if unique:
+                                todo += 1
+                            else:
+                                d += 1
                         else:
                             break
         except KeyboardInterrupt:
             pass
-        print(f"\nfinished. made {n} reqs, {qa} nodes, {s} stems (branching factor {qa/s:.2f}), duplicates {b-qa+1},"
-              f" seldepth {maxply}. the visitor returned {len(all_results)} results")
+        _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
+        print(f"\nfinished. sent {rs} requests, processed {rp}, {qa} nodes, {s} nonleaves (branching factor {(qa-1+todo)/_s:.2f}), "
+              f"duplicates {d}, seldepth {maxply} (cancelled nodes: {todo}). the visitor returned {len(all_results)} results")
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def cdb_explore_visitor(self, board, result, cp_margin, make_request):
+    async def cdb_iterate_queue_visitor(self, board, result, cp_margin, make_request):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
