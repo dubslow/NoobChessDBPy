@@ -20,7 +20,6 @@ At the present time, the scripts are loosely separated into querying scripts vs 
 a basic "paste FEN into command line" skeleton example, as well as some breadth-first style mass-querying of a couple
 types. For queuing, there's scripts to read PGN files, or to paste into the command line PGN, uci output, or SAN.
 
-
 No promises of utility, altho I certainly hope it is. Feedback welcome, via this repo or Stockfish Discord.
 
 Can be used in the ~standard python way:
@@ -52,3 +51,34 @@ python queue_lines.py $'1. e4 c6 2. Nf3 d5 3. Nc3 Nf6 4. e5 Ne4 5. Ne2 Bf5 6. Nf
 
 python queue_pgn.py TCEC_Season_24_-_Division_P.pgn
 ```
+
+The purpose and priorities of this little project are, in order:
+
+1) To be readable and maintainable.
+
+It is my present belief that use of the Python keywords `async` and `await` are the best route to this goal, and the use
+of threads for doing HTTP requests is bad practice -- but I'm open to being proven wrong.
+
+In particular, I was swayed by NJS's blogposts that furthermore, one should be using `async` and `await` in a *structured*
+way, hence the use of `trio`.
+
+The big link: https://vorpus.org/blog/notes-on-structured-concurrency-or-go-statement-considered-harmful/
+
+other related ones:
+https://vorpus.org/blog/some-thoughts-on-asynchronous-api-design-in-a-post-asyncawait-world/
+https://vorpus.org/blog/control-c-handling-in-python-and-trio/
+> The tl;dr is: if you're writing a program using trio, then control-C should generally Just Work the way you expect from
+> regular Python, i.e., it will raise KeyboardInterrupt somewhere in your code, and this exception then propagates out
+> to unwind your stack, run cleanup handlers, and eventually exit the program.
+https://vorpus.org/blog/timeouts-and-cancellation-for-humans/
+
+As per that quote, one of the many advantages of structured concurrency is that ^C should generally "just work" in this
+package without me having done anything special to achieve that, thanks to trio's efforts under the hood.
+
+(Fun fact, NJS is also the author of my favorite PEP [at least amongst the ones I've read].)
+
+2) To be fast, in terms of requests per second.
+
+I believe `async`/`await` is again the best way to achieve this goal, rather than with threads or other stuff. At present,
+this package is capable of around 400-500 requests/second, depending on your CPU, and there remains lots of room for more
+(although there is no rush for more since that's already enough to challenge CDB's backend elves).
