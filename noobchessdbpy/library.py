@@ -417,14 +417,15 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         continue
 
                     # having given the visitor its chance, now we iterate
-                    score = result['moves'][0]['score']
+                    moves = result['moves']
+                    score = moves[0]['score']
                     if abs(score) > 19000:
                         return
                     score_margin = score - cp_margin
 
                     # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
                     new_children = 0
-                    for move in result['moves']:
+                    for move in moves:
                         if move['score'] >= score_margin:
                             child = board.copy(stack=True)
                             child.push_uci(move['uci'])
@@ -440,7 +441,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         todo += new_children
                         s += 1
                     print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t" # {board.fen()}
-                          f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
+                          f'''  {len(moves)=} {", ".join(f"{move['san']}={move['score']}" for move in moves[:5]):<50}''', end='')
         except KeyboardInterrupt:
             pass
         _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
