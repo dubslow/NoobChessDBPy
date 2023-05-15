@@ -64,7 +64,7 @@ async def cdb_iterate(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 
-    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
+    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200),
                         help="centipawn margin for what's considered near PV")
