@@ -417,14 +417,13 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         continue
 
                     # having given the visitor its chance, now we iterate
-                    s += 1
                     score = result['moves'][0]['score']
-                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t" # {board.fen()}
-                          f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
                     if abs(score) > 19000:
                         return
                     score_margin = score - cp_margin
 
+                    # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
+                    new_children = 0
                     for move in result['moves']:
                         if move['score'] >= score_margin:
                             child = board.copy(stack=True)
@@ -432,11 +431,16 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             #print(f"iterating into {move['san']}")
                             unique = await make_request(self.query_all, (child,))
                             if unique:
-                                todo += 1
+                                new_children += 1
                             else:
                                 d += 1
                         else:
                             break
+                    if new_children:
+                        todo += new_children
+                        s += 1
+                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t" # {board.fen()}
+                          f'''{", ".join(f"{move['san']}={move['score']}" for move in result['moves'])}''', end='')
         except KeyboardInterrupt:
             pass
         _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
