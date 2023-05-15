@@ -16,7 +16,23 @@
 #    See the LICENSE file for more details.
 
 '''
-lol
+iterate over CDB near PVs, using the default visitor to `queue` everything walked.
+
+Note: fortresses quickly cause search explosions. Changing the margin by a single cp may cause the iterator to hit a
+fortress, or indeed the same margin used multiple times in a row may cause the (near-)PV to shift towards one (or away
+from one).
+
+Here, "fortress" means "a position where many moves are all nearly equally best", which causes intense branching and
+combinatorial explosion.
+
+Common warning signs for fortresses, loosely in order of utility:
+1) when `todo` increases as fast as `nodes` does
+2) when `todo` approaches the same magnitude as `nodes`
+3) when `dups` increases as fast as `todo` does (more transpositions than novel nodes)
+4) when `dups` approaches the magnitude of `nodes`
+5) when a position has more than 6-8 moves already known (least useful)
+
+TODO: add maxbranch, maxply, margindecay options
 '''
 
 import argparse
@@ -37,7 +53,7 @@ logging.basicConfig(
 
 async def cdb_iterate(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        results = await lib.cdb_iterate(args.fen, lib.cdb_explore_visitor, args.margin)
+        results = await lib.cdb_iterate(args.fen, lib.cdb_iterate_queue_visitor, args.margin)
     # user can write any post-processing they like here
     if args.output:
         with open(args.output, 'w') as f:
