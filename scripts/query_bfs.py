@@ -62,7 +62,7 @@ if __name__ == '__main__':
     limits.add_argument('-p', '--ply', '--limit-ply', type=int, help='the max ply from the root to query')
     limits.add_argument('-i', '--infinite', action='store_true', help='unlimited querying')
 
-    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
+    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
                 help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                       help="maximum number of parallel requests (default: %(default)s)")

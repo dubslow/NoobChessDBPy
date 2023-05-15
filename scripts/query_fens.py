@@ -53,7 +53,7 @@ async def query_fens(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('fens', nargs='+', type=chess.Board,
+    parser.add_argument('fens', nargs='+', type=lambda fen: chess.Board(fen.replace('_', ' ')),
                help="a list of FENs to query")
     args = parser.parse_args()
     trio.run(query_fens, args)

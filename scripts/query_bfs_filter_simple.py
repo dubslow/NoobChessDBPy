@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-b', '--batchsize', type=int,
                         help='this many queries between each filtering (default: a multiple of concurrency)')
-    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
+    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                       help="maximum number of parallel requests (default: %(default)s)")
