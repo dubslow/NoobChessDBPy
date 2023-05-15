@@ -66,8 +66,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
-    parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200),
-                        help="centipawn margin for what's considered near PV")
+    parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
+                        help="centipawn margin for what's considered near PV (choose from [0,200))")
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                       help="maximum number of parallel requests (default: %(default)s)")
     from sys import argv
