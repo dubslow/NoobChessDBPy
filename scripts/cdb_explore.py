@@ -27,10 +27,11 @@ combinatorial explosion.
 
 Common warning signs for fortresses, loosely in order of utility:
 1) when `todo` increases as fast as `nodes` does
-2) when `todo` approaches the same magnitude as `nodes`
-3) when `dups` increases as fast as `todo` does (more transpositions than novel nodes)
+2) when `dups` increases as fast as `todo` does (more transpositions than novel nodes)
+3) when `todo` approaches the same magnitude as `nodes`
 4) when `dups` approaches the magnitude of `nodes`
-5) when a position has more than 6-8 moves already known (least useful)
+5) when `relply` remains depressed lower than in previous similar runs
+6) when a position has more than 6-8 moves already known (least useful)
 
 TODO: add maxbranch, maxply, margindecay options
 '''
