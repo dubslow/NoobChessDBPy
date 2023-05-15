@@ -127,8 +127,13 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to DefaultConcurrency.
     `self.user` is the User-Agent attached to http requests, and can only be set via the constructor.
+
+    The default concurrency is less than "optimal" for maximizing requests/second. On my system, roughly 192 is optimal,
+    while 128 and 256 are near-optimal -- giving a max rate on the order of 400-500 reqs/s. However, just one person
+    running at ~max rate can overwhelm the backend, nevermind two. Therefore, the default is considerably lower to
+    encourage user politeness (to CDB itself and to other users who also suffer when the backend is overloaded).
     '''
-    DefaultConcurrency = 128
+    DefaultConcurrency = 32
     _known_client_kwargs = {"concurrency": DefaultConcurrency, "user": ""}
     def _process_kwargs(self, kwargs):
         # Set our kwargs on self, then delete them, and the rest are forwarded to super()
