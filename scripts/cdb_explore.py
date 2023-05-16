@@ -52,9 +52,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-async def cdb_iterate(args):
+async def iterate_near_pv(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        results = await lib.cdb_iterate(args.fen, lib.cdb_iterate_queue_visitor, args.margin)
+        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_queue_visitor, args.margin)
     # user can write any post-processing they like here
     if args.output:
         with open(args.output, 'w') as f:
@@ -75,4 +75,4 @@ if __name__ == '__main__':
                         help="filename to write query results to (defaults to scriptname.txt)")
 
     args = parser.parse_args()
-    trio.run(cdb_iterate, args)
+    trio.run(iterate_near_pv, args)

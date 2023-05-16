@@ -34,7 +34,7 @@ import trio
 import chess.pgn
 
 from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, parse_pgn
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -42,21 +42,28 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-async def parse_and_queue_pgn(args):
+
+def parse_pgns(args):
+    all_positions, n, u_sub = set(), 0, 0
+    for i, filename in enumerate(args.filenames):
+        with open(filename) as filehandle:
+            this_positions, x = parse_pgn(filehandle, args.start, args.count)
+        n += x
+        u_sub += len(this_positions)
+        all_positions |= this_positions
+        u = len(all_positions)
+        if i > 0:
+            print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} "
+                  f"total, {u/n if n else math.nan:.2%} unique rate")
+    return all_positions
+
+async def mass_queue_set(all_positions):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        all_positions, n, u_sub = set(), 0, 0
-        for i, filename in enumerate(args.filenames):
-            with open(filename) as filehandle:
-                this_positions, x = lib.parse_pgn(filehandle, args.start, args.count)
-            n += x
-            u_sub += len(this_positions)
-            all_positions |= this_positions
-            u = len(all_positions)
-            if i > 0:
-                print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} "
-                      f"total, {u/n if n else math.nan:.2%} unique rate")
         await lib.mass_queue_set(all_positions)
 
+def main(args):
+    all_positions = parse_pgns(args)
+    trio.run(mass_queue_set, all_positions)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -68,6 +75,5 @@ if __name__ == '__main__':
                         help='the number of games to skip from the beginning of each file')
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                                                       help="maximum number of parallel requests (default: %(default)s)")
-
     args = parser.parse_args()
-    trio.run(parse_and_queue_pgn, args)
+    main(args)
