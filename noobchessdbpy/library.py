@@ -29,7 +29,7 @@ __all__ = ['BreadthFirstState', 'AsyncCDBLibrary', 'CircularRequesters']
 ########################################################################################################################
 
 from collections import deque
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 import math
 from typing import Iterable
 
@@ -380,14 +380,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
         try:
          async with trio.open_nursery() as nursery:
-            circular_requesters = await CircularRequesters.create(self, nursery) # Amongst other duties, deduplicating transpositions
+            circular_requesters = CircularRequesters(self, nursery) # Amongst other duties, deduplicating transpositions
             # is delegated to the requesters.
             await circular_requesters.make_request(self.query_all, (rootboard,))
             todo += 1
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
-            async with circular_requesters.as_with():
+            with circular_requesters.as_with():
                 while not await circular_requesters.check_circular_idle():
                     #print("hah...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
                     api_call, args, result = await circular_requesters.read_response()
@@ -483,12 +483,10 @@ class CircularRequesters:
     # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
     # *and* there's no further results for the main task to process.
 
-    @classmethod
-    async def create(klass, active_client:AsyncCDBClient, active_nursery:trio.Nursery):
+    def __init__(self, active_client:AsyncCDBClient, active_nursery:trio.Nursery):
         '''
         Must be initialized with an active `AsyncCDBClient` and an active `trio.Nursery`.
         '''
-        self = klass()
         self.client = active_client
         self.nursery = active_nursery
         self.send_request, self.recv_request = trio.open_memory_channel(self.client.concurrency)
@@ -498,16 +496,14 @@ class CircularRequesters:
         # probably separate sets for queue and query_all is overkill
         self.rs = self.rp = 0
 
-        async with self.recv_request, self.send_results: # close the originals to ensure that only channels in use are open
+        with self.recv_request, self.send_results: # close the originals to ensure that only channels in use are open
             for i in range(self.client.concurrency):
                 self.nursery.start_soon(self._circular_requester, self.recv_request.clone(),
                                                                   self.send_results.clone(), i)
 
-        return self
-
-    @asynccontextmanager # It would be desirable to just write `with self:` rather than `with self.as_with():`, but hey
+    @contextmanager # It would be desirable to just write `with self:` rather than `with self.as_with():`, but hey
     # see https://stackoverflow.com/a/61471301
-    async def as_with(self):
+    def as_with(self):
         '''
         Use of this method is mandatory to ensure proper cleanup, like so:
         
@@ -521,7 +517,7 @@ class CircularRequesters:
 
         ...to ensure proper cleanup of the relevant internal resources.
         '''
-        async with self.send_request, self.recv_results:
+        with self.send_request, self.recv_results:
             yield
 
     async def check_circular_idle(self):
@@ -570,7 +566,7 @@ class CircularRequesters:
                                   send_results:trio.MemoryReceiveChannel, j=None):
         i=0
         #print(1, send_results._state.open_receive_channels)
-        async with recv_request, send_results:
+        with recv_request, send_results:
             #print(2, send_results._state.open_receive_channels)
             async for api_call, args in recv_request:
                 assert api_call.__self__ is self.client # should really, really never fail lol
