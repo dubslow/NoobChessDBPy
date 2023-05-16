@@ -307,13 +307,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         s += 1
                     print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t   {len(moves)=} " # {board.fen()}
                           f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:5]):<40}''', end='')
-        except KeyboardInterrupt:
-            pass
-        rs, rp = circular_requesters.stats()
-        _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-        print(f"\nfinished. sent {rs} requests, processed {rp}, {qa} nodes, {s} nonleaves (branching factor {(qa-1+todo)/_s:.2f}), "
-              f"duplicates {d}, seldepth {maxply} (cancelled nodes: {todo}). the visitor returned {len(all_results)} results")
-        return all_results
+        except BaseException as err:
+            print(f"\ninterrupted by {err!r}")
+        finally:
+            rs, rp = circular_requesters.stats()
+            _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
+            print(f"\nfinished. sent {rs} requests, processed {rp}, {qa} nodes, {s} nonleaves (branching factor {(qa-1+todo)/_s:.2f}), "
+                  f"duplicates {d}, seldepth {maxply} (cancelled nodes: {todo}). the visitor returned {len(all_results)} results")
+            return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
     async def iterate_near_pv_queue_visitor(self, circular_requesters, board, result):
