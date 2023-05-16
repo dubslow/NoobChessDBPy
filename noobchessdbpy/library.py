@@ -175,78 +175,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    @staticmethod
-    def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
-        '''
-        Read one PGN file: load any and all positions found in the file into memory, including all PVs in comments.
-        Deduplicate, returning a set of FENs. With large files, can cause large memory consumption.
-
-        The PGN parser is so tolerant to malformed data that detecting it is difficult. Thus, malformed data may cause
-        difficult-to-trace downstream errors.
-
-        Users pass a `filehandle`, whose management is the user's problem. Skip `start` games from the file, then read
-        no more than `count`.
-
-        returns (set of unique-ified parsed postions, count of pre-dedup positions seen)
-        '''
-        print(f"reading '{filehandle.name}' ...")
-
-        if start > 0:
-            print(f"skipping {start} games")
-        _start = start
-        while _start > 0 and (game := chess.pgn.read_game(filehandle, Visitor=chess.pgn.SkipVisitor)) is not None:
-            _start -= 1
-            #print(f"skipped a game, {_start} to go")
-        if _start > 0:
-            print(f"still need to skip {_start} games but no more in the file")
-            return set(), 0
-
-        games = []
-        n = 0
-        while n < count and (game := chess.pgn.read_game(filehandle)) is not None:
-            games.append(game)
-            n += 1
-        if n < count < math.inf:
-            print(f"read only {n} games instead of {count} from {filehandle.name}")
-        else:
-            print(f"read {n} games from {filehandle.name}")
-        # no real way to validate the parsed data, just assume it's good and hope for the best
-
-        all_positions = set()
-        x = 0
-        for i, game in enumerate(games, start=start+1):
-            n = m = 0
-            #print(f"processing game {i}")
-            for node in game.all_variations():
-                parent = node.parent
-                if parent:
-                    pboard = node.parent.board() # TODO: ChildNode.board() is very, very expensive, refactor?
-                    board = pboard.copy(stack=False)
-                    board.push(node.move)
-                    #print(f"just added node {m}, reached by {pboard.san(node.move)}, now checking comment for pv...")
-                else:
-                    board = node.board()
-                    pboard = None
-                all_positions.add(board.fen())
-                n += 1
-                m += 1
-
-                if pboard:
-                    comment_pv_sans = node.parse_comment_pv_san()
-                    if comment_pv_sans:
-                        n += len(comment_pv_sans)
-                        #print(f"found comment pv at board:\n{board}\nadding {len(comment_pv_sans)} positions")
-                        # generally, the first move of pv is the same as the played move, but rarely not
-                        #if comment_pv_sans[0] != node.san():
-                        #    print(f"game {i}, ply {board.ply()}: found node where move played differs from pv! {node.san()} vs {comment_pv_sans[0]} ")
-                        for fen in pboard.yield_fens_from_sans(comment_pv_sans):
-                            all_positions.add(fen)
-            print(f"in game {i} found {m} nodes, {n} positions")
-            x += n
-        unique = len(all_positions)
-        print(f"after deduplicating {filehandle.name}, found {unique} unique positions "
-              f"from {x} total, {unique/x:.2%} unique rate")
-        return all_positions, x # hopefully all the other crap here is garbage-collected quickly, freeing memory
 
     ####################################################################################################################
 
@@ -294,7 +222,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=5) -> dict:
+    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin=5) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -331,7 +259,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             todo += 1
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
-            # Now we act as the "producer", processing request results and sending more requests, loop control TBD
+            # Now we act as the "producer", processing request results and sending more requests
             with circular_requesters.as_with():
                 while not await circular_requesters.check_circular_idle():
                     #print("hah...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
@@ -388,7 +316,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def cdb_iterate_queue_visitor(self, circular_requesters, board, result):
+    async def iterate_near_pv_queue_visitor(self, circular_requesters, board, result):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
@@ -411,4 +339,79 @@ class AsyncCDBLibrary(AsyncCDBClient):
         #else:
         await circular_requesters.make_request(self.queue, (board,))
         return result
+
+########################################################################################################################
+
+def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
+    '''
+    Read one PGN file: load any and all positions found in the file into memory, including all PVs in comments.
+    Deduplicate, returning a set of FENs. With large files, can cause large memory consumption.
+
+    The PGN parser is so tolerant to malformed data that detecting it is difficult. Thus, malformed data may cause
+    difficult-to-trace downstream errors.
+
+    Users pass a `filehandle`, whose management is the user's problem. Skip `start` games from the file, then read
+    no more than `count`.
+
+    returns (set of unique-ified parsed postions, count of pre-dedup positions seen)
+    '''
+    print(f"reading '{filehandle.name}' ...")
+
+    if start > 0:
+        print(f"skipping {start} games")
+    _start = start
+    while _start > 0 and (game := chess.pgn.read_game(filehandle, Visitor=chess.pgn.SkipVisitor)) is not None:
+        _start -= 1
+        #print(f"skipped a game, {_start} to go")
+    if _start > 0:
+        print(f"still need to skip {_start} games but no more in the file")
+        return set(), 0
+
+    games = []
+    n = 0
+    while n < count and (game := chess.pgn.read_game(filehandle)) is not None:
+        games.append(game)
+        n += 1
+    if n < count < math.inf:
+        print(f"read only {n} games instead of {count} from {filehandle.name}")
+    else:
+        print(f"read {n} games from {filehandle.name}")
+    # no real way to validate the parsed data, just assume it's good and hope for the best
+
+    all_positions = set()
+    x = 0
+    for i, game in enumerate(games, start=start+1):
+        n = m = 0
+        #print(f"processing game {i}")
+        for node in game.all_variations():
+            parent = node.parent
+            if parent:
+                pboard = node.parent.board() # TODO: ChildNode.board() is very, very expensive, refactor?
+                board = pboard.copy(stack=False)
+                board.push(node.move)
+                #print(f"just added node {m}, reached by {pboard.san(node.move)}, now checking comment for pv...")
+            else:
+                board = node.board()
+                pboard = None
+            all_positions.add(board.fen())
+            n += 1
+            m += 1
+
+            if pboard:
+                comment_pv_sans = node.parse_comment_pv_san()
+                if comment_pv_sans:
+                    n += len(comment_pv_sans)
+                    #print(f"found comment pv at board:\n{board}\nadding {len(comment_pv_sans)} positions")
+                    # generally, the first move of pv is the same as the played move, but rarely not
+                    #if comment_pv_sans[0] != node.san():
+                    #    print(f"game {i}, ply {board.ply()}: found node where move played differs from pv! {node.san()} vs {comment_pv_sans[0]} ")
+                    for fen in pboard.yield_fens_from_sans(comment_pv_sans):
+                        all_positions.add(fen)
+        print(f"in game {i} found {m} nodes, {n} positions")
+        x += n
+    unique = len(all_positions)
+    print(f"after deduplicating {filehandle.name}, found {unique} unique positions "
+          f"from {x} total, {unique/x:.2%} unique rate")
+    return all_positions, x # hopefully all the other crap here is garbage-collected quickly, freeing memory
+
 
