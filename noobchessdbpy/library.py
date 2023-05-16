@@ -24,11 +24,12 @@ API client: `AsyncCDBLibrary`. Create an instance of this class to use the algor
 Arguments are generally `chess` objects.
 '''
 
-__all__ = ['BreadthFirstState', 'AsyncCDBLibrary']
+__all__ = ['BreadthFirstState', 'AsyncCDBLibrary', 'CircularRequesters']
 
 ########################################################################################################################
 
 from collections import deque
+from contextlib import asynccontextmanager
 import math
 from typing import Iterable
 
@@ -349,59 +350,51 @@ class AsyncCDBLibrary(AsyncCDBClient):
     ####################################################################################################################
 
     async def cdb_iterate(self, rootboard:chess.Board, visitor, cp_margin=5) -> dict:
-        # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
-        # *and* there's no further results for the main task to process.
-        send_request, recv_request = trio.open_memory_channel(self.concurrency)
-        send_results, recv_results = trio.open_memory_channel(math.inf) # sigh lol
-        queued_fens, queried_fens = set(), set() # gotta be sure to not needlessly double up
-        channels_idle = lambda recv_request, recv_results: (
-                                (stats := recv_request.statistics()).tasks_waiting_receive == stats.open_receive_channels
-                            and recv_results.statistics().current_buffer_used <= 0)
-        # channel data are (api_call, (args*)) or (api_call, (results*))
+        '''
+        Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
+        (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
+        against the current node's nonbest scores.) Iteration terminates upon hitting leaf nodes (e.g.
+        CDBStatus.UnknownBoard, CDBStatus.TrivialBoard), including leaves with "solved" decisive scores (> 19000).
+
+        Such iteration is done by means of recursive `query_all` calls, in a more or less breadth-first order, altho
+        with low branching factors the resulting tree can look rather like an MCTS tree with high selective depths.
+
+        Upon seeing a fresh node, before iterating into its near-best children, this calls the `visitor` so that the user
+        may take some custom action for themself. For example, the `visitor` may also issue a `queue` on the node (in
+        addition to the `query_all` that produced the node), or the `visitor` may apply some custom filtering of its own
+        for later return to the user. Indeed, the `visitor`'s return value is stored in a dict with structure
+        `{fenstr: visitor_retval}`, this dict being the return value of this function.
+
+        `visitor` must be a callable with the following signature:
+        async def visitor(client:AsyncCDBClient, circular_requesters:CircularRequesters, board:chess.Board, result, cp_margin) -> retval | None
+        The visitor may make (arbitrary) api calls by e.g. `circular_requesters.make_request(client.queue, (board,))`.
+        `result` is whatever was returned by `client.query_all(board)`.
+        '''
+        if cp_margin > 200: # TODO: is this too low? am i too paranoid?
+            raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
         all_results = {} # get that yucky global feeling again
-        rs = rp = s = qa = d = todo = maxply = 0 # rs = requests sent, rp = requests processed, todo = queryalls
-        # sent but unprocessed, qa = qas processed, s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
+        s = qa = d = todo = maxply = 0 # todo = queryalls sent but unprocessed, qa = qas processed,
+        # s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
         baseply = rootboard.ply()
-        async def make_request(call, args): # little helper closure
-            '''returns if request+board unique'''
-            fen = _strip_fen(args[0].fen())
-            if call == self.query_all:
-                if fen in queried_fens:
-                    return False
-                queried_fens.add(fen)
-            elif call == self.queue:
-                if fen in queued_fens:
-                    return False
-                queued_fens.add(fen)
-            await send_request.send((call, args))
-            nonlocal rs; rs += 1
-            return True
 
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
         try:
          async with trio.open_nursery() as nursery:
-            async with recv_request, send_results: # close the originals to ensure that only channels in use are open
-                for i in range(self.concurrency):
-                    nursery.start_soon(self._cdb_iterate_requester, recv_request.clone(), send_results.clone(), i)
-            #print("blah:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
-            await make_request(self.query_all, (rootboard,)); todo += 1
+            circular_requesters = await CircularRequesters.create(self, nursery) # Amongst other duties, deduplicating transpositions
+            # is delegated to the requesters.
+            await circular_requesters.make_request(self.query_all, (rootboard,))
+            todo += 1
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests, loop control TBD
-            async with send_request, recv_results:
-                while True:
-                    #print("looping...", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
-                    await checkpoint() # Necessary? to get an accurate check below, but I'm not yet convinced that this is sufficient.
-                    if channels_idle(recv_request, recv_results):
-                        break
-                    # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking in the next line
-                    #print("looped:", (stats := recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, recv_results.statistics().current_buffer_used)
-                    api_call, args, result = await recv_results.receive()
-                    rp += 1
+            async with circular_requesters.as_with():
+                while not await circular_requesters.check_circular_idle():
+                    #print("hah...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
+                    api_call, args, result = await circular_requesters.read_response()
                     board = args[0]
-                    fen = board.fen() # this call is still expensive...
-                    #print("processing result:", api_call.__name__, board.safe_peek(), fen)
-                    if api_call != self.query_all: # https://stackoverflow.com/a/15977850/1497645
+                    #print("processing result:", api_call.__name__, board.safe_peek(), board.fen())
+                    # any calls other than query_all aren't our business, so to speak, and are ignored.
+                    if api_call != self.query_all: # https://stackoverflow.com/a/15977850
                         continue
                     #print("processing queryall result")
                     qa += 1; todo -= 1
@@ -410,9 +403,9 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     maxply = max(relply, maxply)
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, board, result, cp_margin, make_request)
+                    vres = await visitor(self, circular_requesters, board, result)
                     if vres:
-                        all_results[fen] = vres
+                        all_results[board.fen()] = vres # board.fen() remains monumentally expensive
                     if not isinstance(result, dict):
                         continue
 
@@ -422,7 +415,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     if abs(score) > 19000:
                         return
                     score_margin = score - cp_margin
-
                     # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
                     new_children = 0
                     for move in moves:
@@ -430,7 +422,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             child = board.copy(stack=True)
                             child.push_uci(move['uci'])
                             #print(f"iterating into {move['san']}")
-                            unique = await make_request(self.query_all, (child,))
+                            unique = await circular_requesters.make_request(self.query_all, (child,))
                             if unique:
                                 new_children += 1
                             else:
@@ -440,28 +432,27 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     if new_children:
                         todo += new_children
                         s += 1
-                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t" # {board.fen()}
-                          f'''  {len(moves)=} {", ".join(f"{move['san']}={move['score']}" for move in moves[:5]):<50}''', end='')
+                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t   {len(moves)=} " # {board.fen()}
+                          f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:5]):<40}''', end='')
         except KeyboardInterrupt:
             pass
+        rs, rp = circular_requesters.stats()
         _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
         print(f"\nfinished. sent {rs} requests, processed {rp}, {qa} nodes, {s} nonleaves (branching factor {(qa-1+todo)/_s:.2f}), "
               f"duplicates {d}, seldepth {maxply} (cancelled nodes: {todo}). the visitor returned {len(all_results)} results")
         return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def cdb_iterate_queue_visitor(self, board, result, cp_margin, make_request):
+    async def cdb_iterate_queue_visitor(self, circular_requesters, board, result):
         '''
         By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
         existing moves seem unclear. (But dont iterate into TB/mate scores)
         '''
-        if cp_margin > 200: # TODO: is this too low? am i too paranoid?
-            raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
 
         if isinstance(result, CDBStatus):
             #print("queryall no results")
             if result not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
-                await make_request(self.queue, (board,))
+                await circular_requesters.make_request(self.queue, (board,))
             return
 
         moves = result['moves']
@@ -473,29 +464,121 @@ class AsyncCDBLibrary(AsyncCDBClient):
         #    for move in board.legal_moves:
         #        await make_request(self.store, (board, move))
         #else:
-        await make_request(self.queue, (board,))
+        await circular_requesters.make_request(self.queue, (board,))
         return result
+
+
+class CircularRequesters:
+    '''
+    Abstract out the setup of a producer guiding requesters, but which also relies on the requester results to make
+    further requests. The pattern is useful for e.g. traversing CDB or indeed, say, Wikipedia article links. (6 degrees
+    of separation?)
+
+    Must be initialized with an active `AsyncCDBClient` and an active `trio.Nursery`. Performs deduplication upon
+    (api_call, args[0]), the latter of which is presumed to be the `chess.Board`. (Implemenation detail: currently only
+    deduplicates for `query_all` and `queue`)
+
+    Public methods include `make_request`, `read_response`, `check_circular_idle`, and `stats`.
+    '''
+    # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
+    # *and* there's no further results for the main task to process.
+
+    @classmethod
+    async def create(klass, active_client:AsyncCDBClient, active_nursery:trio.Nursery):
+        '''
+        Must be initialized with an active `AsyncCDBClient` and an active `trio.Nursery`.
+        '''
+        self = klass()
+        self.client = active_client
+        self.nursery = active_nursery
+        self.send_request, self.recv_request = trio.open_memory_channel(self.client.concurrency)
+        self.send_results, self.recv_results = trio.open_memory_channel(math.inf) # sigh lol
+        # channel data are (api_call, (args*)) or (api_call, (args*), result)
+        self.queued_fens, self.queried_fens = set(), set() # gotta be sure to not needlessly double up
+        # probably separate sets for queue and query_all is overkill
+        self.rs = self.rp = 0
+
+        async with self.recv_request, self.send_results: # close the originals to ensure that only channels in use are open
+            for i in range(self.client.concurrency):
+                self.nursery.start_soon(self._circular_requester, self.recv_request.clone(),
+                                                                  self.send_results.clone(), i)
+
+        return self
+
+    @asynccontextmanager # It would be desirable to just write `with self:` rather than `with self.as_with():`, but hey
+    # see https://stackoverflow.com/a/61471301
+    async def as_with(self):
+        '''
+        Use of this method is mandatory to ensure proper cleanup, like so:
         
-    @staticmethod
-    async def _cdb_iterate_requester(recv_request:trio.MemorySendChannel,
-                                     send_results:trio.MemoryReceiveChannel, j):
+        ```
+        with circular_requesters.as_with():
+            while not await circular_requesters.check_circular_idle():
+                ...
+                send requests and read responses
+                ...
+        ```
+
+        ...to ensure proper cleanup of the relevant internal resources.
+        '''
+        async with self.send_request, self.recv_results:
+            yield
+
+    async def check_circular_idle(self):
+        '''
+        This *should* be usable in a while loop condition without causing any deadlocking, tho I'm not fully certain
+        about that. But at least it's worked in practice so far
+        '''
+        await checkpoint() # Necessary (sufficient?) for the main task to give way so that the requesters consume any
+        # available work. Otherwise, a requester may have finished a request without having yet return the result and
+        # gone idle. Even with this checkpoint, I think it only works with "fair scheduling" where the checkpointing
+        # task is guaranteed to not resume control until all requesters have gone fully idle. I think...
+        # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking
+        # in self.read_response().
+        #print("looping...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
+        stats = self.recv_request.statistics()
+        return (    stats.tasks_waiting_receive >= stats.open_receive_channels
+                and self.recv_results.statistics().current_buffer_used <= 0)
+
+    async def make_request(self, call, args): # little helper closure
+        '''returns if request+board is unique (for `query_all` and `queue`) (the board is assumed to be the first arg)'''
+        fen = _strip_fen(args[0].fen())
+        if call == self.client.query_all:
+            if fen in self.queried_fens:
+                return False
+            self.queried_fens.add(fen)
+        elif call == self.client.queue:
+            if fen in self.queued_fens:
+                return False
+            self.queued_fens.add(fen)
+        await self.send_request.send((call, args))
+        self.rs += 1
+        return True
+
+    async def read_response(self):
+        '''read a request's response from the requesters. returns (api_call, args, result)'''
+        results = await self.recv_results.receive()
+        self.rp += 1
+        return results
+
+    def stats(self):
+        '''returns (requests sent, requests read)'''
+        return self.rs, self.rp
+
+    #@staticmethod
+    async def _circular_requester(self, recv_request:trio.MemorySendChannel,
+                                  send_results:trio.MemoryReceiveChannel, j=None):
         i=0
+        #print(1, send_results._state.open_receive_channels)
         async with recv_request, send_results:
+            #print(2, send_results._state.open_receive_channels)
             async for api_call, args in recv_request:
+                assert api_call.__self__ is self.client # should really, really never fail lol
                 #print(f"{j=} {i=} GETting {api_call.__name__}...")
+                #print(3, send_results._state.open_receive_channels)
                 result = await api_call(*args)
+                #print(4, send_results._state.open_receive_channels)
                 #print(f"{j=} {i=} GOT {api_call.__name__}, sending result to main task...")
                 await send_results.send((api_call, args, result))
                 #print(f"{j=} {i=} now idling in for loop")
                 i+=1
-
-class CircularChannels:
-    '''
-    Abstract out the setup of a producer guiding requesters, but which also relies on the requester results to make
-    further requests. Useful for e.g. traversing CDB or indeed, say, Wikipedia article links. (6 degrees of separation?)
-    '''
-    pass # TODO (For now, minimum viable product, factoring is secondary to functioning
-
-
-
-
