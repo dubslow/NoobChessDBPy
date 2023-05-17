@@ -30,7 +30,7 @@ from typing import Iterable
 import chess.pgn
 import trio
 
-from noobchessdbpy.api import _strip_fen
+from noobchessdbpy.api import strip_fen
 from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
@@ -65,7 +65,7 @@ async def mass_queue_uci(args):
         for line in read_one_file_uci(fname):
             boards = list(parse_fen_uci(args.fen, line))
             n += len(boards)
-            fens.update(_strip_fen(board.fen()) for board in boards)
+            fens.update(strip_fen(board.fen()) for board in boards)
     print(f"found {n} positions of which {len(fens)} are unique, queueing...")
     async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
         await lib.mass_queue_set(fens)

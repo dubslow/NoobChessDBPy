@@ -384,8 +384,12 @@ class AsyncCDBClient(httpx.AsyncClient):
 
 ########################################################################################################################
 
-def _strip_fen(fen:str):
-    '''CDB ignores the last two fields, so strip them for some purposes'''
+def strip_fen(fen:str):
+    '''
+    CDB ignores the last two FEN fields, and this will strip them. In uncommon cases, two positions may be identical
+    except for the history, and using this enables deduplicating those for CDB purposes. That said, for e.g. PGN parsing,
+    the difference can be on the order of several percent, a noticeable savings when at large magnitudes.
+    '''
     parts = fen.split()
     size = len(parts)
     if size > 6:

@@ -33,7 +33,7 @@ import chess
 import chess.pgn
 import trio
 
-from ..api import AsyncCDBClient, CDBStatus, _strip_fen
+from ..api import AsyncCDBClient, CDBStatus, strip_fen
 from . import _chess_extensions
 from ._stateful_iterators import BreadthFirstState, CircularRequesters, __all__ as _s_i_all__
 from ._script_args import CDBArgs, __all__ as _s_a_all__
@@ -305,7 +305,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
                     vres = await visitor(self, circular_requesters, board, result, margin, relply)
                     if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
-                        all_results[_strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
+                        all_results[strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
                     if not isinstance(result, dict):
                         continue
 

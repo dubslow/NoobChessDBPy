@@ -32,7 +32,7 @@ import chess
 import trio
 from trio.lowlevel import checkpoint
 
-from ..api import AsyncCDBClient, _strip_fen
+from ..api import AsyncCDBClient, strip_fen
 
 __all__ = ['BreadthFirstState', 'CircularRequesters']
 
@@ -162,7 +162,7 @@ class CircularRequesters:
 
     async def make_request(self, call, args): # little helper closure
         '''returns if request+board is unique (for `query_all` and `queue`) (the board is assumed to be the first arg)'''
-        fen = _strip_fen(args[0].fen())
+        fen = strip_fen(args[0].fen())
         if call == self.client.query_all:
             if fen in self.queried_fens:
                 return False
