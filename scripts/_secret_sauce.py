@@ -25,7 +25,7 @@ import trio
 
 from noobchessdbpy.api import AsyncCDBClient, CDBError
 
-async def mittent_clear(periodmins=20, totalmins=17*60):
+async def mittent_clear(periodmins=15, totalmins=24*60):
     async with AsyncCDBClient() as client:
         for i in range(totalmins//periodmins+1):
             print("clearing... ", end='')
@@ -42,4 +42,4 @@ parser.add_argument('-t', '--total', type=float, default=24, help='total number 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    trio.run(mittent_clear, args.period, args.total*60)
+    trio.run(mittent_clear, args.period, round(args.total*60))
