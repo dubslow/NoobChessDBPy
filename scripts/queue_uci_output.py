@@ -30,7 +30,8 @@ from typing import Iterable
 import chess.pgn
 import trio
 
-from noobchessdbpy.library import AsyncCDBClient, AsyncCDBLibrary
+from noobchessdbpy.api import _strip_fen
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -64,19 +65,18 @@ async def mass_queue_uci(args):
         for line in read_one_file_uci(fname):
             boards = list(parse_fen_uci(args.fen, line))
             n += len(boards)
-            fens.update(board.fen() for board in boards)
+            fens.update(_strip_fen(board.fen()) for board in boards)
     print(f"found {n} positions of which {len(fens)} are unique, queueing...")
-    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib, trio.open_nursery() as nursery:
+    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
         await lib.mass_queue_set(fens)
     print("complete")
 
 
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('filenames', nargs='+', help="A list of filenames to read UCI output from.")
+CDBArgs.Fen.add_to_parser(parser)
+CDBArgs.add_api_args_to_parser(parser)
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('filenames', nargs='+', help="A list of filenames to read UCI output from.")
-    parser.add_argument('-f', '--fen', type=chess.Board, default=chess.Board(),
-                            help="the FEN which is the root of the PV lines in the files (default: classical startpos)")
-    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                      help="maximum number of parallel requests (default: %(default)s)")
     args = parser.parse_args()
     trio.run(mass_queue_uci, args)

@@ -39,11 +39,11 @@ class CDBArgs(Enum):
     A list of common arguments amongst the many scripts (can be used to automatically include them)
     '''
     Concurrency    = ('-c', '--concurrency'), {'type': int, 'default': AsyncCDBClient.DefaultConcurrency,
-                     'help': "maximum number of parallel requests (default: %(default)s)"}
+                     'help': "maximum number of parallel requests (default: %(default)s, which is lower than possible)"}
     User           = ('-u', '--user'), {'default': '',
                      'help': 'add this username to the HTTP User-Agent header (recommended)'}
     Fen            = ('-f', '--fen'), {'type': lambda fen: chess.Board(fen.replace('_', ' ')), 'default': chess.Board(),
-                     'help': "the FEN of the root position from which to start (default: classical startpos)"}
+                     'help': "the FEN of the root position (default: classical startpos)"}
     LimitCount     = ('-l', '--count', '--limit-count'), {'type': int,
                      'help': 'the maximum number of things to do'} # recommend overwriting this lol
     PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'help': 'the max ply from the root to query'}
