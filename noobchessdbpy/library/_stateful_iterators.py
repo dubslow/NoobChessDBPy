@@ -18,8 +18,8 @@
 '''
 This module implements some standard CDB interaction algorithms, building atop the API.
 
-Since we want to keep reusing one http client, the algorithms are all implemented as methods on a further subclass of the
-API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms.
+Since we want to keep reusing one http client, the algorithms are all implemented as methods on a further subclass of
+the API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms.
 
 Arguments are generally `chess` objects.
 '''
@@ -32,11 +32,9 @@ import chess
 import trio
 from trio.lowlevel import checkpoint
 
-from .api import AsyncCDBClient, _strip_fen
+from ..api import AsyncCDBClient, _strip_fen
 
 __all__ = ['BreadthFirstState', 'CircularRequesters']
-
-
 
 ########################################################################################################################
 
@@ -190,7 +188,7 @@ class CircularRequesters:
     #@staticmethod
     async def _circular_requester(self, recv_request:trio.MemorySendChannel,
                                   send_results:trio.MemoryReceiveChannel, j=None):
-        i=0
+        #i=0
         #print(1, send_results._state.open_receive_channels)
         with recv_request, send_results:
             #print(2, send_results._state.open_receive_channels)
@@ -203,5 +201,5 @@ class CircularRequesters:
                 #print(f"{j=} {i=} GOT {api_call.__name__}, sending result to main task...")
                 await send_results.send((api_call, args, result))
                 #print(f"{j=} {i=} now idling in for loop")
-                i+=1
+                #i+=1
 

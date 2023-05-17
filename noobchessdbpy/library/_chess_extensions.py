@@ -16,12 +16,17 @@
 #    See the LICENSE file for more details.
 
 '''
-This module adds some extra methods/algorithms to some `chess` classes for use in this package
+This module adds some extra methods/algorithms to some `chess` classes for use in this package, exposing no symbols of
+its own.
 '''
+
+########################################################################################################################
 
 import chess
 import chess.pgn
 from typing import Iterable
+
+__all__ = [] # this module only modifies other modules
 
 ########################################################################################################################
 # Manually extend chess.Board with a couple utility algorithms

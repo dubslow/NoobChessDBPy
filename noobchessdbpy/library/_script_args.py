@@ -28,7 +28,7 @@ from typing import Sequence
 
 import chess
 
-from .api import AsyncCDBClient
+from ..api import AsyncCDBClient
 
 __all__ = ['CDBArgs']
 

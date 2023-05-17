@@ -33,13 +33,13 @@ import chess
 import chess.pgn
 import trio
 
-from .api import AsyncCDBClient, CDBStatus, _strip_fen
-from . import chess_extensions
+from ..api import AsyncCDBClient, CDBStatus, _strip_fen
+from . import _chess_extensions
 from ._stateful_iterators import BreadthFirstState, CircularRequesters, __all__ as _s_i_all__
 from ._script_args import CDBArgs, __all__ as _s_a_all__
 # The contents of _stateful_iterators are exposed via this module, but separate files for better focus when reading
 
-__all__ = ['AsyncCDBLibrary'] + _s_i_all__ + _s_a_all__
+__all__ = ['AsyncCDBLibrary', 'parse_pgn'] + _s_i_all__ + _s_a_all__
 
 ########################################################################################################################
 
