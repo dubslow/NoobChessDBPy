@@ -47,7 +47,7 @@ import trio
 import chess.pgn
 
 from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -56,7 +56,7 @@ logging.basicConfig(
 )
 
 async def iterate_near_pv(args):
-    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
+    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
         results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin,
                                             margin_decay=args.decay, maxbranch=args.branching)
     # user can write any post-processing they like here
@@ -68,19 +68,15 @@ async def iterate_near_pv(args):
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
-          help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
+CDBArgs.Fen.add_to_parser(parser)
 parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
                     help="centipawn margin for what's considered near PV (choose from [0,200))")
 parser.add_argument('-d', '--decay', '--margin-decay', type=float, default=1.0,
                     help='linear rate per ply by which to shrink the margin (default: %(default)s)')
 parser.add_argument('-b', '--branching', '--max-branch', type=int, default=math.inf,
                     help='maximum branch factor at any given node')
-parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                    help="maximum number of parallel requests (default: %(default)s)")
-from sys import argv
-parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
-                    help="filename to write query results to (defaults to scriptname.txt)")
+CDBArgs.OutputFilename.add_to_parser(parser)
+CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':
     args = parser.parse_args()
