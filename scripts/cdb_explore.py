@@ -63,20 +63,20 @@ async def iterate_near_pv(args):
         print(f"wrote to {args.output}, all done, now exiting.")
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-
-    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
-    parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
-                        help="centipawn margin for what's considered near PV (choose from [0,200))")
-    parser.add_argument('-d', '--decay', type=float, default=1.0,
-                        help='Rate per ply by which to shrink the margin (default: %(default)s)')
-    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                        help="maximum number of parallel requests (default: %(default)s)")
-    from sys import argv
-    parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
-                        help="filename to write query results to (defaults to scriptname.txt)")
+parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
+                    help="centipawn margin for what's considered near PV (choose from [0,200))")
+parser.add_argument('-d', '--decay', type=float, default=1.0,
+                    help='Rate per ply by which to shrink the margin (default: %(default)s)')
+parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
+                    help="maximum number of parallel requests (default: %(default)s)")
+from sys import argv
+parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
+                    help="filename to write query results to (defaults to scriptname.txt)")
 
+if __name__ == '__main__':
     args = parser.parse_args()
     trio.run(iterate_near_pv, args)
+

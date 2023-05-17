@@ -250,7 +250,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         (The included visitor iterate_near_pv_visitor_queue_any ignores the last two arguments.)
 
         The keyword args customize the margin-iteration behavior for various purposes.
-        `margin_decay` is a positive number which shrinks the margin by at a rate of `margin_decay` per ply.
+        `margin_decay` is a positive number which shrinks the margin at a rate of `margin_decay` per ply.
             For example, `cp_margin` of 20 and `margin_decay` of 1 would result in relply=10 having cp_margin=10 and
                 relply 20 and higher having cp_margin=0.
             This is useful to aid exploration near root without exploding the search too much when far from the root.
@@ -328,7 +328,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     else:
                         continue # no printing for you, transposing node!
                     _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-                    print(f"\rnodes={qa} stems={s} {relply=} {margin=} braching={(qa-1+todo)/_s:.2f} {score=} dups={d} "
+                    print(f"\rnodes={qa} stems={s} {relply=} {margin=} branching={(qa-1+todo)/_s:.2f} {score=} dups={d} "
                           f"{todo=} t/n={todo/qa:.2%}: \t  moves={len(moves)}: " # {board.fen()}
                           f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:2]):<8}    ''', end='')
         except BaseException as err:
