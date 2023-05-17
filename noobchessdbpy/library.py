@@ -222,7 +222,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin=5) -> dict:
+    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -239,9 +239,15 @@ class AsyncCDBLibrary(AsyncCDBClient):
         `{fenstr: visitor_retval}`, this dict being the return value of this function.
 
         `visitor` must be a callable with the following signature:
-        async def visitor(client:AsyncCDBClient, circular_requesters:CircularRequesters, board:chess.Board, result, cp_margin) -> retval | None
+        async def visitor(client:AsyncCDBClient, circular_requesters:CircularRequesters,
+                          board:chess.Board, result, margin, relply) -> retval | None:
         The visitor may make (arbitrary) api calls by e.g. `circular_requesters.make_request(client.queue, (board,))`.
+        This iterator will ignore any api calls made by the visitor. The visitor should not use query_all (as the iterator
+        will do so), but any other api call is fair game.
         `result` is whatever was returned by `client.query_all(board)`.
+        `margin` is whatever the local margin at this node is that iterate_near_pv is using.
+        `relply` is the relative ply from the root of this `board`.
+        (The included visitor iterate_near_pv_visitor_queue_any ignores the last two arguments.)
         '''
         if cp_margin > 200: # TODO: is this too low? am i too paranoid?
             raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
@@ -262,23 +268,23 @@ class AsyncCDBLibrary(AsyncCDBClient):
             # Now we act as the "producer", processing request results and sending more requests
             with circular_requesters.as_with():
                 while not await circular_requesters.check_circular_idle():
-                    #print("hah...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
                     api_call, args, result = await circular_requesters.read_response()
-                    board = args[0]
                     #print("processing result:", api_call.__name__, board.safe_peek(), board.fen())
                     # any calls other than query_all aren't our business, so to speak, and are ignored.
                     if api_call != self.query_all: # https://stackoverflow.com/a/15977850
                         continue
+
                     #print("processing queryall result")
-                    qa += 1; todo -= 1
+                    qa += 1; todo -= 1;
+                    board = args[0]
                     # we want the ply counters to include leaves, tho we only print on nonleaves
                     relply = board.ply() - baseply
                     maxply = max(relply, maxply)
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, circular_requesters, board, result)
+                    vres = await visitor(self, circular_requesters, board, result, cp_margin, relply)
                     if vres:
-                        all_results[board.fen()] = vres # board.fen() remains monumentally expensive
+                        all_results[_strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
                     if not isinstance(result, dict):
                         continue
 
@@ -317,27 +323,18 @@ class AsyncCDBLibrary(AsyncCDBClient):
             return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def iterate_near_pv_queue_visitor(self, circular_requesters, board, result):
+    async def iterate_near_pv_visitor_queue_any(self, circular_requesters, board, result, margin, relply):
         '''
-        By default, iterate-by-query_all on children within the margin, with an extra queue for good measure if the
-        existing moves seem unclear. (But dont iterate into TB/mate scores)
+        Pass this to iterate_near_pv to `queue` everything in sight -- which is perhaps a bit rough on the backend.
+        Returns results for most nodes, but excluding nodes with no moves or else with a decisive score.
+        (This function ignores the last two arguments.)
         '''
-
-        if isinstance(result, CDBStatus):
-            #print("queryall no results")
+        if isinstance(result, CDBStatus): # leaf node of some sort or another
             if result not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
                 await circular_requesters.make_request(self.queue, (board,))
             return
-
-        moves = result['moves']
-        score = moves[0]['score']
-        if abs(score) > 19000:
+        if abs(result['moves'][0]['score']) > 19000:
             return
-        #worst_near_margin = moves[-1]['score'] >= (score - min(cp_margin, 50))
-        #if len(moves) > 5 and worst_near_margin: # with small margin, this is highly unlikely, but with large margin...
-        #    for move in board.legal_moves:
-        #        await make_request(self.store, (board, move))
-        #else:
         await circular_requesters.make_request(self.queue, (board,))
         return result
 

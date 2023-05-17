@@ -382,10 +382,14 @@ class AsyncCDBClient(httpx.AsyncClient):
             async for val in recv_serialize:
                 collector.append(val)
 
+########################################################################################################################
 
 def _strip_fen(fen:str):
+    '''CDB ignores the last two fields, so strip them for some purposes'''
     parts = fen.split()
-    if len(parts) != 6:
-        raise ValueError(f"found fen with other than 6 fields: {fen}")
-    return ' '.join(parts[:4])
+    size = len(parts)
+    if size > 6:
+        raise ValueError(f"found fen with more than 6 fields: {fen}")
+    size = max(size, 4)
+    return ' '.join(parts[:size])
         

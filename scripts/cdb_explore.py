@@ -54,7 +54,7 @@ logging.basicConfig(
 
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_queue_visitor, args.margin)
+        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin)
     # user can write any post-processing they like here
     if args.output:
         with open(args.output, 'w') as f:
