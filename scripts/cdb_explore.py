@@ -16,7 +16,10 @@
 #    See the LICENSE file for more details.
 
 '''
-iterate over CDB near PVs, using the default visitor to `queue` everything walked.
+iterate over CDB near PVs, using a "queue any" visitor to `queue` everything seen.
+
+See this for more details about the walking:
+`python -c "from noobchessdbpy.library import AsyncCDBLibrary; help(AsyncCDBLibrary.iterate_near_pv)"`
 
 Note: fortresses quickly cause search explosions. Changing the margin by a single cp may cause the iterator to hit a
 fortress, or indeed the same margin used multiple times in a row may cause the (near-)PV to shift towards one (or away
@@ -33,7 +36,7 @@ Common warning signs for fortresses, loosely in order of utility:
 5) when `relply` remains depressed lower than in previous similar runs
 6) when a position has more than 6-8 moves already known (least useful)
 
-TODO: add maxbranch, maxply, margindecay options
+TODO: add maxply, fortress-detecting options
 '''
 
 import argparse
@@ -54,7 +57,8 @@ logging.basicConfig(
 
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin, margin_decay=args.decay)
+        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin,
+                                            margin_decay=args.decay, maxbranch=args.branching)
     # user can write any post-processing they like here
     if args.output:
         print(f"writing to {args.output}...")
@@ -68,8 +72,10 @@ parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_',
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
 parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
                     help="centipawn margin for what's considered near PV (choose from [0,200))")
-parser.add_argument('-d', '--decay', type=float, default=1.0,
-                    help='Rate per ply by which to shrink the margin (default: %(default)s)')
+parser.add_argument('-d', '--decay', '--margin-decay', type=float, default=1.0,
+                    help='linear rate per ply by which to shrink the margin (default: %(default)s)')
+parser.add_argument('-b', '--branching', '--max-branch', type=int, default=math.inf,
+                    help='maximum branch factor at any given node')
 parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
                     help="maximum number of parallel requests (default: %(default)s)")
 from sys import argv

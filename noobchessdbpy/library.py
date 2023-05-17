@@ -222,7 +222,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0) -> dict:
+    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0, maxbranch=math.inf) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -242,20 +242,23 @@ class AsyncCDBLibrary(AsyncCDBClient):
         async def visitor(client:AsyncCDBClient, circular_requesters:CircularRequesters,
                           board:chess.Board, result, margin, relply) -> retval | None:
         The visitor may make (arbitrary) api calls by e.g. `circular_requesters.make_request(client.queue, (board,))`.
-        This iterator will ignore any api calls made by the visitor. The visitor should not use query_all (as the iterator
-        will do so), but any other api call is fair game.
+        `iterate_near_pv` will ignore any api calls made by the visitor. The visitor should not use query_all (as the
+        iterator will do so), but any other api call is fair game.
         `result` is whatever was returned by `client.query_all(board)`.
         `margin` is whatever the local margin at this node is that iterate_near_pv is using.
         `relply` is the relative ply from the root of this `board`.
-        (The included visitor iterate_near_pv_visitor_queue_any ignores the last two arguments.)
+        (The included visitor `iterate_near_pv_visitor_queue_any` ignores the last two arguments.)
 
         The keyword args customize the margin-iteration behavior for various purposes.
-        `margin_decay` is a positive number which shrinks the margin at a rate of `margin_decay` per ply.
+        `margin_decay` is a positive number which linearly shrinks the margin at a rate of `margin_decay` per ply.
             For example, `cp_margin` of 20 and `margin_decay` of 1 would result in relply=10 having cp_margin=10 and
                 relply 20 and higher having cp_margin=0.
             This is useful to aid exploration near root without exploding the search too much when far from the root.
+        `maxbranch` is an integer which caps the maximum branching at any given node, regardless of other limits.
+
+        Typically merely one of decay or maxbranch is needed to control fortresses/explosions, but mileage will vary.
+
         TODO:
-        `maxbranch`
         `maxply`
         `fortress_detection`
         '''
@@ -263,6 +266,9 @@ class AsyncCDBLibrary(AsyncCDBClient):
             raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
         if margin_decay < 0:
             raise ValueError(f"{margin_decay=} must be zero or positive")
+        if maxbranch < 0:
+            raise ValueError(f"{maxbranch=} must be zero or positive")
+
         all_results = {} # get that yucky global feeling again
         s = qa = d = todo = maxply = 0 # todo = queryalls sent but unprocessed, qa = qas processed,
         # s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
@@ -297,7 +303,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
                     vres = await visitor(self, circular_requesters, board, result, margin, relply)
-                    if vres:
+                    if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
                         all_results[_strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
                     if not isinstance(result, dict):
                         continue
@@ -310,18 +316,17 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     score_margin = score - margin
                     # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
                     new_children = 0
-                    for move in moves:
-                        if move['score'] >= score_margin:
-                            child = board.copy(stack=True)
-                            child.push_uci(move['uci'])
-                            #print(f"iterating into {move['san']}")
-                            unique = await circular_requesters.make_request(self.query_all, (child,))
-                            if unique:
-                                new_children += 1
-                            else:
-                                d += 1
-                        else:
+                    for i, move in enumerate(moves):
+                        if i >= maxbranch or move['score'] < score_margin:
                             break
+                        child = board.copy(stack=True)
+                        child.push_uci(move['uci'])
+                        #print(f"iterating into {move['san']}")
+                        unique = await circular_requesters.make_request(self.query_all, (child,))
+                        if unique:
+                            new_children += 1
+                        else:
+                            d += 1
                     if new_children:
                         todo += new_children
                         s += 1
