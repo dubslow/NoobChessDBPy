@@ -54,11 +54,13 @@ logging.basicConfig(
 
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin)
+        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin, margin_decay=args.decay)
     # user can write any post-processing they like here
     if args.output:
+        print(f"writing to {args.output}...")
         with open(args.output, 'w') as f:
             f.write('{\n' + '\n'.join(f'''"{key}": {val}''' for key, val in results.items()) + '\n}\n')
+        print(f"wrote to {args.output}, all done, now exiting.")
 
 
 if __name__ == '__main__':
@@ -68,8 +70,10 @@ if __name__ == '__main__':
           help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
     parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
                         help="centipawn margin for what's considered near PV (choose from [0,200))")
+    parser.add_argument('-d', '--decay', type=float, default=1.0,
+                        help='Rate per ply by which to shrink the margin (default: %(default)s)')
     parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                      help="maximum number of parallel requests (default: %(default)s)")
+                        help="maximum number of parallel requests (default: %(default)s)")
     from sys import argv
     parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
                         help="filename to write query results to (defaults to scriptname.txt)")

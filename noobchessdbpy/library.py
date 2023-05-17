@@ -222,7 +222,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
-    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin) -> dict:
+    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -248,9 +248,21 @@ class AsyncCDBLibrary(AsyncCDBClient):
         `margin` is whatever the local margin at this node is that iterate_near_pv is using.
         `relply` is the relative ply from the root of this `board`.
         (The included visitor iterate_near_pv_visitor_queue_any ignores the last two arguments.)
+
+        The keyword args customize the margin-iteration behavior for various purposes.
+        `margin_decay` is a positive number which shrinks the margin by at a rate of `margin_decay` per ply.
+            For example, `cp_margin` of 20 and `margin_decay` of 1 would result in relply=10 having cp_margin=10 and
+                relply 20 and higher having cp_margin=0.
+            This is useful to aid exploration near root without exploding the search too much when far from the root.
+        TODO:
+        `maxbranch`
+        `maxply`
+        `fortress_detection`
         '''
         if cp_margin > 200: # TODO: is this too low? am i too paranoid?
             raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
+        if margin_decay < 0:
+            raise ValueError(f"{margin_decay=} must be zero or positive")
         all_results = {} # get that yucky global feeling again
         s = qa = d = todo = maxply = 0 # todo = queryalls sent but unprocessed, qa = qas processed,
         # s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
@@ -277,12 +289,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     #print("processing queryall result")
                     qa += 1; todo -= 1;
                     board = args[0]
-                    # we want the ply counters to include leaves, tho we only print on nonleaves
+                    # we want the ply counters to include leaves, tho we only print on nonleaves (or transposing "leaves")
                     relply = board.ply() - baseply
                     maxply = max(relply, maxply)
+                    margin = max(round(cp_margin - margin_decay * relply), 0)
+                    #print('\n', f"{relply=}, {cp_margin=}, {margin_decay=}, {margin=}")
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, circular_requesters, board, result, cp_margin, relply)
+                    vres = await visitor(self, circular_requesters, board, result, margin, relply)
                     if vres:
                         all_results[_strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
                     if not isinstance(result, dict):
@@ -293,7 +307,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     score = moves[0]['score']
                     if abs(score) > 19000:
                         return
-                    score_margin = score - cp_margin
+                    score_margin = score - margin
                     # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
                     new_children = 0
                     for move in moves:
@@ -311,15 +325,20 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     if new_children:
                         todo += new_children
                         s += 1
-                    print(f"\rnodes={qa} stems={s} {relply=} {score=} dups={d} {todo=}: \t   {len(moves)=} " # {board.fen()}
-                          f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:5]):<40}''', end='')
+                    else:
+                        continue # no printing for you, transposing node!
+                    _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
+                    print(f"\rnodes={qa} stems={s} {relply=} {margin=} braching={(qa-1+todo)/_s:.2f} {score=} dups={d} "
+                          f"{todo=} t/n={todo/qa:.2%}: \t  moves={len(moves)}: " # {board.fen()}
+                          f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:2]):<8}    ''', end='')
         except BaseException as err:
             print(f"\ninterrupted by {err!r}")
         finally:
             rs, rp = circular_requesters.stats()
             _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-            print(f"\nfinished. sent {rs} requests, processed {rp}, {qa} nodes, {s} nonleaves (branching factor {(qa-1+todo)/_s:.2f}), "
-                  f"duplicates {d}, seldepth {maxply} (cancelled nodes: {todo}). the visitor returned {len(all_results)} results")
+            print(f"\nfinished.\nsent {rs} requests, processed {rp},\n"
+                  f"{qa} nodes, {s} nonleaves, {todo} skipped (branching factor {(qa-1+todo)/_s:.2f}), "
+                  f"duplicates {d}, seldepth {maxply}.\nthe visitor returned {len(all_results)} results.")
             return all_results
 
     @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)

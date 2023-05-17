@@ -383,6 +383,6 @@ def _strip_fen(fen:str):
     size = len(parts)
     if size > 6:
         raise ValueError(f"found fen with more than 6 fields: {fen}")
-    size = max(size, 4)
+    size = min(size, 4)
     return ' '.join(parts[:size])
         
