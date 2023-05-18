@@ -46,20 +46,20 @@ class CDBArgs(Enum):
     Fen            = ('-f', '--fen'), {'type': lambda fen: chess.Board(fen.replace('_', ' ')), 'default': chess.Board(),
                      'help': "the FEN of the root position (default: classical startpos)"}
     LimitCount     = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
-                     'help': 'the maximum number of things to do'} # recommend overwriting this lol
-    PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'help': 'the max ply from the root to query'}
+                     'help': 'the maximum number of positions to request'}
+    PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'default': math.inf,
+                     'help': 'the max ply from the root to request'}
     OutputFilename = ('-o', '--output'), {'default': argv[0].replace('.py', '.txt'),
                      'help': "filename to write query results to (default: %(default)s)"}
     #AutoClear      = ('-a', '--autoclear'), {'action': 'store_true'} TODO: implement this in API
                      # no help message, "hidden" argument for "advanced" users
 
-    def add_to_parser(self, parser, help=None):
+    def add_to_parser(self, parser, **_kwargs):
         '''
-        Add argument `self` to the given parser, optionally overwriting the default help message.
+        Add argument `self` to the given parser, optionally overwriting kwargs.
         '''
         args, kwargs = self.value
-        if help:
-            kwargs['help'] = help
+        kwargs |= _kwargs
         parser.add_argument(*args, **kwargs)
 
     @staticmethod
