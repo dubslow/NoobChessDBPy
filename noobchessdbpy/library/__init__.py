@@ -39,7 +39,7 @@ from ._stateful_iterators import BreadthFirstState, CircularRequesters, __all__ 
 from ._script_args import CDBArgs, __all__ as _s_a_all__
 # The contents of _stateful_iterators are exposed via this module, but separate files for better focus when reading
 
-__all__ = ['AsyncCDBLibrary', 'parse_pgn'] + _s_i_all__ + _s_a_all__
+__all__ = ['AsyncCDBLibrary', 'parse_pgn_to_set'] + _s_i_all__ + _s_a_all__
 
 ########################################################################################################################
 
@@ -365,7 +365,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
 ########################################################################################################################
 
-def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
+def parse_pgn_to_set(filehandle, start=0, count=math.inf) -> (set[str], int):
     '''
     Read one PGN file: load any and all positions found in the file into memory, including all PVs in comments.
     Deduplicate, returning a set of FENs. With large files, can cause large memory consumption.

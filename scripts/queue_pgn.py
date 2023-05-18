@@ -19,11 +19,15 @@
 This script reads PGN files, one at a time: read games from one file into memory, find all positions in the games
 (including variations and PVs stored in comments), deduplicate the positions, rinse and repeat, and cross-deduplicate
 between all files. Then mass-queue the cross-deduplicated positions into CDB.
-(Note: queueing near-root positions can be quite expensive, so use this with caution. TODO: write a better form that
-does only some queueing, and some querying instead)
+
+Caution: PGN parsing is painfully slow, and furthermore can consume *lots* of memory. Monitor memory usage.
+
 Note: queue order is arbitrary.
 
-(One can also queue lines by pasting PGN directly on the command line, see queue_lines.py)
+(Note: queueing near-root positions can be quite expensive, so use this with caution. TODO: write a better form that
+does only some queueing, and some querying instead)
+
+One can also queue lines by pasting PGN directly on the command line, see queue_lines.py
 '''
 
 import argparse
@@ -33,8 +37,7 @@ import math
 import trio
 import chess.pgn
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary, parse_pgn
+from noobchessdbpy.library import AsyncCDBLibrary, parse_pgn_to_set, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -47,7 +50,7 @@ def parse_pgns(args):
     all_positions, n, u_sub = set(), 0, 0
     for i, filename in enumerate(args.filenames):
         with open(filename) as filehandle:
-            this_positions, x = parse_pgn(filehandle, args.start, args.count)
+            this_positions, x = parse_pgn_to_set(filehandle, args.start, args.count)
         n += x
         u_sub += len(this_positions)
         all_positions |= this_positions
@@ -58,22 +61,21 @@ def parse_pgns(args):
     return all_positions
 
 async def mass_queue_set(all_positions):
-    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
+    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
         await lib.mass_queue_set(all_positions)
 
 def main(args):
     all_positions = parse_pgns(args)
     trio.run(mass_queue_set, all_positions)
 
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('filenames', nargs='+', help="""A list of filenames to read PGN from. """)
+CDBArgs.LimitCount.add_to_parser(parser, help='the maximum number of games to process from each file')
+parser.add_argument('-s', '--start', type=int, default=0,
+                    help='the number of games to skip from the beginning of each file')
+CDBArgs.add_api_args_to_parser(parser)
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('filenames', nargs='+',
-                        help="""A list of filenames to read PGN from. """)
-    parser.add_argument('-l', '--count', '--limit-count', type=int, default=math.inf,
-                        help='the maximum number of games to process from each file')
-    parser.add_argument('-s', '--start', type=int, default=0,
-                        help='the number of games to skip from the beginning of each file')
-    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                      help="maximum number of parallel requests (default: %(default)s)")
     args = parser.parse_args()
     main(args)
