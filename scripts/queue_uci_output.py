@@ -56,7 +56,7 @@ def parse_fen_uci(board:chess.Board, ucimoves:Iterable[str]) -> list[chess.Board
         board.push_uci(uci)
         yield board.copy(stack=False)
 
-async def mass_queue_uci(args):
+def parse_ucis(args):
     fens = set()
     # this fen -> chess.Board -> fen cycle remains quite expensive...
     n = 0
@@ -67,10 +67,16 @@ async def mass_queue_uci(args):
             n += len(boards)
             fens.update(strip_fen(board.fen()) for board in boards)
     print(f"found {n} positions of which {len(fens)} are unique, queueing...")
+    return fens
+
+async def mass_queue_set(args, fens):
     async with AsyncCDBLibrary(args=args) as lib:
         await lib.mass_queue_set(fens)
-    print("complete")
 
+def main(args):
+    fens = parse_ucis(args)
+    trio.run(mass_queue_set, args, fens)
+    print("complete")
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('filenames', nargs='+', help="A list of filenames to read UCI output from.")
@@ -79,4 +85,4 @@ CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    trio.run(mass_queue_uci, args)
+    main(args)
