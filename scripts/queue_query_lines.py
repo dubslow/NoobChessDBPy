@@ -16,7 +16,8 @@
 #    See the LICENSE file for more details.
 
 '''
-Usage like queue_lines.py except also queries the lines after queuing them. Mostly useless.
+Usage like queue_lines.py (e.g. pasting TCEC PVs) except also queries the lines after queuing them.
+Almost entirely useless.
 '''
 
 import argparse
@@ -27,8 +28,7 @@ import chess
 import chess.pgn
 import trio
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 
 
-async def queue_and_query_single_line(args, time=29):
+async def queue_and_query_lines(args, time=30):
     '''
     Probably this function is of not-so-great utility, as the requisite waiting time for reverse-querying to be useful
     is highly variable and frequently more than a minute. Best stick with just the queue instead.
@@ -47,24 +47,26 @@ async def queue_and_query_single_line(args, time=29):
     sometimes hasten connections and backpropagation, however in any case the connections are always made within a day
     or two by CDB backend tree-integrity processes.)
     '''
-    async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
+    async with AsyncCDBLibrary(user=args.user) as lib, trio.open_nursery() as nursery:
         games = []
-        for arg in args:
+        for arg in args.pgns:
             game = chess.pgn.read_game(StringIO(arg))
             games.append(game)
             print("queuing line...")
             nursery.start_soon(lib.queue_single_line, game)
-        print(f"queued all lines, waiting for {time=}...")
-        await trio.sleep(time) # 10? 30? 60? how long do queues take lol (default timing is Client timeout less 1)
+        print(f"queued all lines, waiting for {time}s...")
+        await trio.sleep(time) # 10? 30? 60? how long do queues take lol (default timing is Client timeout)
         print("waited, now reverse querying the lines...")
         for game in games:
             print("reverse querying line...")
             nursery.start_soon(lib.query_reverse_single_line, game)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('pgns', nargs='+',
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('pgns', nargs='+',
                help="a set of pasted lines (PGN) to queue. Use bash $'' quoting to enable a multiline single argument.")
+CDBArgs.add_api_flat_args_to_parser(parser)
+
+if __name__ == '__main__':
     args = parser.parse_args()
-    trio.run(queue_and_query_single_line, args, 61)
+    trio.run(queue_and_query_lines, args)

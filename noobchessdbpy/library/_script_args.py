@@ -69,7 +69,16 @@ class CDBArgs(Enum):
         for arg in members:
             arg.add_to_parser(parser)
 
-    @classmethod
-    def add_api_args_to_parser(klass, parser): # maybe this should just statically say `CDBArgs` instead of `klass`?
-        klass.add_args_to_parser(parser, (klass.Concurrency, klass.User)) # klass.AutoClear
+    @staticmethod
+    def add_api_args_to_parser(parser): # are these static reference to CDBArgs a problem?
+        '''
+        Add the standard API arguments (`AsyncCDBClient._known_client_kwargs`) to the parser.
+        '''
+        CDBArgs.add_args_to_parser(parser, (CDBArgs.Concurrency, CDBArgs.User)) # CDBArgs.AutoClear
 
+    @staticmethod
+    def add_api_flat_args_to_parser(parser):
+        '''
+        Like `add_api_args_to_parser` except excluding Concurrency, for use in scripts which spawn based on inputs.
+        '''
+        CDBArgs.add_args_to_parser(parser, (CDBArgs.User, )) # CDBArgs.AutoClear
