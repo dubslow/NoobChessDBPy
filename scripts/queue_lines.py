@@ -16,15 +16,15 @@
 #    See the LICENSE file for more details.
 
 '''
-This script reads games directly from command line arguments, and mass-queues the main line in parallel.
+This script reads games directly from command line arguments, and mass-queues the main line concurrently.
 
-PGN (SAN) can be pasted into a single argument by using bash's multiline string quoting syntax:
+PGN/SAN can be pasted into a single argument by using bash's multiline string quoting syntax:
 
 $'this is
 a multiline
 single arg'
 
-(see e.g. https://stackoverflow.com/a/25941527/1497645)
+(see e.g. https://stackoverflow.com/a/25941527)
 
 Pasting SAN alone works, and is assumed to be from the startpos. Pasting PGN headers also works, including non-startpos
 positions from which to read SAN (such as in TCEC PVs copied out of the TCEC GUI).
@@ -32,7 +32,9 @@ positions from which to read SAN (such as in TCEC PVs copied out of the TCEC GUI
 This is useful for e.g. pasting TCEC PVs (players or kibitzers) for queueing. One can paste the game moves, the two
 players' PV pgn and the two kibitzers' PV pgn, for a total of 5 arguments to this script, which will all be queued in
 parallel (less than a second for hundreds of positions). In other words, live TCEC data can be queued into CDB just as
-fast as you can copy and paste it. (To queue all variations from a PGN-game, see queue_pgn.py.)
+fast as you can copy and paste it.
+
+To queue all variations, or else to queue from a PGN file, see queue_pgn.py.
 '''
 
 import argparse
@@ -43,8 +45,7 @@ import chess
 import chess.pgn
 import trio
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -63,10 +64,11 @@ async def queue_single_line(args):
         #print("all lines begun...")
     print("all queues complete")
 
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('pgns', nargs='+',
+               help="a set of pasted lines (PGN) to queue. Use bash $'' quoting to enable a multiline single argument.")
+CDBArgs.add_api_flat_args_to_parser(parser)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('pgns', nargs='+',
-               help="a set of pasted lines (PGN) to queue. Use bash $'' quoting to enable a multiline single argument.")
     args = parser.parse_args()
     trio.run(queue_single_line, args)
