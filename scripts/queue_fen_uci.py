@@ -19,7 +19,8 @@
 parses "fen ucimove ucimove ucimove" directly from cmdline args, no string quoting required
 useful for pasting ad hoc FEN + UCI move inputs, e.g. your local engine output (the `moves` UCI token is optional)
 
-if you already have pgn, try pasting it to queue_lines.py or reading it from file with queue_pgn.py
+If you've collated some UCI ouptut to file, use queue_uci_output.py.
+If you have PGN, reading it from file with queue_pgn.py or pasting it to queue_lines.py.
 
 example:
 
@@ -35,7 +36,7 @@ import logging
 import chess.pgn
 import trio
 
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -61,19 +62,23 @@ def parse_fen_uci(args) -> list[chess.Board]:
         lst.append(board.copy(stack=False))
     return lst
 
-async def queue_line(args):
-    line = parse_fen_uci(args)
-    print(f"parsed {len(line)} positions from cmdline")
-    async with AsyncCDBLibrary() as lib, trio.open_nursery() as nursery:
+async def queue_lines(args, line):
+    async with AsyncCDBLibrary(args=args) as lib, trio.open_nursery() as nursery:
         n = 0
         for board in line:
             nursery.start_soon(lib.queue, board)
             n += 1
     print(f"completed {n} queues")    
 
+def main(args):
+    line = parse_fen_uci(args.fen_and_moves)
+    print(f"parsed {len(line)} positions from cmdline")
+    trio.run(queue_lines, args, line)
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('fen_and_moves', nargs='+', help="fen and UCI moves (unquoted)")
+CDBArgs.add_api_flat_args_to_parser(parser)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('fen_and_moves', nargs='+', help="fen and UCI moves (unquoted)")
     args = parser.parse_args()
-    trio.run(queue_line, args.fen_and_moves)
+    main(args)
