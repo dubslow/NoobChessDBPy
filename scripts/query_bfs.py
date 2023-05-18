@@ -28,8 +28,7 @@ import math
 import trio
 import chess
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
+from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -39,37 +38,14 @@ logging.basicConfig(
 
 ########################################################################################################################
 
-async def query_bfs(rootpos, maxply=math.inf, count=math.inf, outfile=None, concurrency=AsyncCDBClient.DefaultConcurrency):
-    print(f"{maxply=}, {count=}, {concurrency=}")
-    async with AsyncCDBLibrary(concurrency=concurrency, user='Dubslow') as lib:
-        results = await lib.query_breadth_first(BreadthFirstState(rootpos), maxply=maxply, count=count)
-    #results = {b.fen(): j for b, j in results}
-    #for res in results:
-    #    print(res['moves'][0:2])
-    # the user may write whatever processing of interest here
-    if outfile:
-        # raw json probably isn't terribly legible on its own
-        with open(outfile, 'a') as outhandle:
-            outhandle.write('\n'.join(f"{b.fen()}\n{j}" for b, j in results) + '\n')
-        
+async def query_bfs(args):
+    print(f"maxply={args.ply}, count={args.count}")
+    async with AsyncCDBLibrary(args=args) as lib:
+        print("flufl", lib.concurrency, lib.headers)
+        results = await lib.query_breadth_first(BreadthFirstState(args.fen), maxply=args.ply, count=args.count)
+    return results
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-
-    limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
-    limits.add_argument('-l', '--count', '--limit-count', type=int, help='the maximum number of positions to query')
-    limits.add_argument('-p', '--ply', '--limit-ply', type=int, help='the max ply from the root to query')
-    limits.add_argument('-i', '--infinite', action='store_true', help='unlimited querying')
-
-    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
-                help="the FEN of the rootpos from which to start breadth-first searching (default: classical startpos)")
-    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                      help="maximum number of parallel requests (default: %(default)s)")
-    parser.add_argument('-o', '--output', help="filename to append query results to")
-
-    args = parser.parse_args()
-
+def main(args):
     if not args.count and not args.ply and not args.infinite:
         parser.error("at least one of the limits is required (see --help)")
     elif args.infinite and (args.count or args.ply):
@@ -79,4 +55,28 @@ if __name__ == '__main__':
     if args.ply is None:
         args.ply = math.inf
 
-    trio.run(query_bfs, args.fen, args.ply, args.count, args.output, args.concurrency)
+    results = trio.run(query_bfs, args)
+    #results = {b.fen(): j for b, j in results}
+    #for res in results:
+    #    print(res['moves'][0:2])
+    # the user may write whatever processing of interest here
+    if args.output:
+        print(f"writing to {args.output}...")
+        # raw json probably isn't terribly legible on its own
+        with open(args.output, 'w') as handle:
+            handle.write('\n'.join(f"{b.fen()}\n{j}" for b, j in results) + '\n')
+    print("complete")
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
+CDBArgs.LimitCount.add_to_parser(limits, default=None)
+CDBArgs.PlyMax.add_to_parser(limits, default=None)
+limits.add_argument('-i', '--infinite', action='store_true', help='unlimited querying')
+
+CDBArgs.add_args_to_parser(parser, (CDBArgs.Fen, CDBArgs.OutputFilename))
+CDBArgs.add_api_args_to_parser(parser)
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    main(args)
