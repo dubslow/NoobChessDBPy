@@ -41,7 +41,6 @@ logging.basicConfig(
 async def query_bfs(args):
     print(f"maxply={args.ply}, count={args.count}")
     async with AsyncCDBLibrary(args=args) as lib:
-        print("flufl", lib.concurrency, lib.headers)
         results = await lib.query_breadth_first(BreadthFirstState(args.fen), maxply=args.ply, count=args.count)
     return results
 

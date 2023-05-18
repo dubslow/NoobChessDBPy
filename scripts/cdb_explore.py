@@ -18,7 +18,7 @@
 '''
 iterate over CDB near PVs, using a "queue any" visitor to `queue` everything seen.
 
-See this for more details about the walking:
+Run this command for more details about the walking:
 `python -c "from noobchessdbpy.library import AsyncCDBLibrary; help(AsyncCDBLibrary.iterate_near_pv)"`
 
 Note: fortresses quickly cause search explosions. Changing the margin by a single cp may cause the iterator to hit a
@@ -56,7 +56,7 @@ logging.basicConfig(
 )
 
 async def iterate_near_pv(args):
-    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
+    async with AsyncCDBLibrary(args=args) as lib:
         results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin,
                                             margin_decay=args.decay, maxbranch=args.branching)
     # user can write any post-processing they like here
@@ -70,7 +70,7 @@ async def iterate_near_pv(args):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 CDBArgs.Fen.add_to_parser(parser)
 parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
-                    help="centipawn margin for what's considered near PV (choose from [0,200))")
+                    help='''centipawn margin for what's considered "near PV" (choose from [0,200))''')
 parser.add_argument('-d', '--decay', '--margin-decay', type=float, default=1.0,
                     help='linear rate per ply by which to shrink the margin (default: %(default)s)')
 parser.add_argument('-b', '--branching', '--max-branch', type=int, default=math.inf,
@@ -81,4 +81,3 @@ CDBArgs.add_api_args_to_parser(parser)
 if __name__ == '__main__':
     args = parser.parse_args()
     trio.run(iterate_near_pv, args)
-
