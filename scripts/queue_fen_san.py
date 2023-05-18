@@ -35,7 +35,7 @@ import logging
 import chess.pgn
 import trio
 
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -54,16 +54,20 @@ def parse_fen_san(args) -> str:
     args = args[6:]
     return f'''[FEN "{fen}"]\n''' + ' '.join(args)
 
-async def queue_line(args):
-    pgnstr = parse_fen_san(args)
-    pgn = chess.pgn.read_game(StringIO(pgnstr))
-    print(f"parsed {len(list(pgn.mainline()))} positions from cmdline")
-    async with AsyncCDBLibrary() as lib:
+async def queue_line(args, pgn):
+    async with AsyncCDBLibrary(args=args) as lib:
         await lib.queue_single_line(pgn)
 
+def main(args):
+    pgnstr = parse_fen_san(args.fen_and_moves)
+    pgn = chess.pgn.read_game(StringIO(pgnstr))
+    print(f"parsed {len(list(pgn.mainline()))} positions from cmdline")
+    trio.run(queue_line, args, pgn)
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('fen_and_moves', nargs='+', help="fen and SAN moves (unquoted)")
+CDBArgs.add_api_flat_args_to_parser(parser)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('fen_and_moves', nargs='+', help="fen and SAN moves (unquoted)")
     args = parser.parse_args()
-    trio.run(queue_line, args.fen_and_moves)
+    main(args)
