@@ -57,7 +57,7 @@ class BreadthFirstState:
         self.rootply = self.rootpos.ply()
 
         self.queue = deque(rootpos.legal_child_fens())
-        self.seen = set()
+        self.seen = set() # for deduplicating, fen should be stripped, however we rely on nonstripped context for maxply
         self.n = self.d = 0
         # if we've yielded `n` positions, and our tree has branching factor `b`, then on average the memory use is about
         # `queue`: sizeof(chess.Board) * n * b (b ~ 35-40, so this is a lot)
@@ -72,14 +72,16 @@ class BreadthFirstState:
 
         print(f"starting bfs iter at relative ply {self.board.ply() - self.rootply} with {count=} {maxply=}")
         while n < count and (self.board.ply() - self.rootply) <= maxply:
-            if self.fen not in self.seen:
+            if strip_fen(self.fen) not in self.seen:
                 n += 1; self.n += 1
                 # In unlimited mode, the queue is on average "fucking big"
                 # surprisingly (to me at least), pre-filtering for duplicates here doesn't do much of anything
                 # altho even a little something might be a benefit when 1M nodes deep
-                self.queue.extend(filter(lambda f: f not in self.seen, self.board.legal_child_fens(stack=False)))
-                if self.n & 0x3F == 0: print(f"bfs: {self.n=} relative ply {self.board.ply() - self.rootply}", end='\r') #{self.d=} {self.d/self.n=:.2%}")
-                self.seen.add(self.fen)
+                self.queue.extend(filter(lambda f: strip_fen(f) not in self.seen,
+                                         self.board.legal_child_fens(stack=False)))
+                if self.n & 0x3F == 0: print(f"\rbfs: {self.n=} relative ply {self.board.ply() - self.rootply}", end='')
+                                             #{self.d=} {self.d/self.n=:.2%}")
+                self.seen.add(strip_fen(self.fen))
                 yield self.board
             else:
                 self.d += 1

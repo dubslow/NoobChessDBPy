@@ -416,7 +416,7 @@ def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
             else:
                 board = node.board()
                 pboard = None
-            all_positions.add(board.fen())
+            all_positions.add(strip_fen(board.fen()))
             n += 1
             m += 1
 
@@ -429,7 +429,7 @@ def parse_pgn(filehandle, start=0, count=math.inf) -> (set[str], int):
                     #if comment_pv_sans[0] != node.san():
                     #    print(f"game {i}, ply {board.ply()}: found node where move played differs from pv! {node.san()} vs {comment_pv_sans[0]} ")
                     for fen in pboard.yield_fens_from_sans(comment_pv_sans):
-                        all_positions.add(fen)
+                        all_positions.add(strip_fen(fen))
         print(f"in game {i} found {m} nodes, {n} positions")
         x += n
     unique = len(all_positions)
