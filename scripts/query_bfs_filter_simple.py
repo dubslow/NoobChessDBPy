@@ -104,17 +104,13 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
 CDBArgs.LimitCount.add_to_parser(limits, default=None,
                                          help='the maximum number of positions to query (rounded to batchsize)')
-CDBArgs.PlyMax.add_to_parser(limits, default=None, help='the max ply from the root to query')
+CDBArgs.PlyMax.add_to_parser(limits, default=None)
 limits.add_argument('-t', '--target', type=int, help='stop after the target number of positions passing the filter')
 
 
 parser.add_argument('-b', '--batchsize', type=int,
                     help='this many queries between each filtering (default: a multiple of concurrency)')
-CDBArgs.Fen.add_to_parser(parser,
-              help="the FEN of the root position whence to start breadth-first searching (default: classical startpos)")
-CDBArgs.OutputFilename.add_to_parser(parser)
-
-
+CDBArgs.add_args_to_parser(parser, (CDBArgs.Fen, CDBArgs.OutputFilename))
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':
