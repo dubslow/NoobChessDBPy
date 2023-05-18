@@ -47,7 +47,7 @@ async def queue_and_query_lines(args, time=30):
     sometimes hasten connections and backpropagation, however in any case the connections are always made within a day
     or two by CDB backend tree-integrity processes.)
     '''
-    async with AsyncCDBLibrary(user=args.user) as lib, trio.open_nursery() as nursery:
+    async with AsyncCDBLibrary(args=args) as lib, trio.open_nursery() as nursery:
         games = []
         for arg in args.pgns:
             game = chess.pgn.read_game(StringIO(arg))

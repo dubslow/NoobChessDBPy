@@ -67,7 +67,7 @@ async def mass_queue_uci(args):
             n += len(boards)
             fens.update(strip_fen(board.fen()) for board in boards)
     print(f"found {n} positions of which {len(fens)} are unique, queueing...")
-    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
+    async with AsyncCDBLibrary(args=args) as lib:
         await lib.mass_queue_set(fens)
     print("complete")
 

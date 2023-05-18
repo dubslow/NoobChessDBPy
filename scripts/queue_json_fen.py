@@ -67,7 +67,7 @@ def parse_json_fens(args):
     return all_positions
 
 async def mass_queue_set(args, all_positions):
-    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
+    async with AsyncCDBLibrary(args=args) as lib:
         await lib.mass_queue_set(all_positions)
 
 def main(args):

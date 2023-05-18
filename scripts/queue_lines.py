@@ -55,7 +55,7 @@ logging.basicConfig(
 
 
 async def queue_single_line(args):
-    async with AsyncCDBLibrary(user=args.user) as lib, trio.open_nursery() as nursery:
+    async with AsyncCDBLibrary(args=args) as lib, trio.open_nursery() as nursery:
         #print("initialized client and outer nursery")
         for i, arg in enumerate(args.pgns):
             game = chess.pgn.read_game(StringIO(arg))

@@ -135,20 +135,38 @@ class AsyncCDBClient(httpx.AsyncClient):
     '''
     DefaultConcurrency = 32
     _known_client_kwargs = {"concurrency": DefaultConcurrency, "user": ""}
+    # In addition to regular kwargs, we also accept the special kw "args": its value is a namespace from which we read
+    # the other kwargs (but any actual kwargs override the "args" values). In "args", we ignore unknown kwargs, while
+    # regular unknown kwargs are forwarded to the parent class.
+    # "args" is useful to simplify passing command line args to this constructor via CDBArgs.
     def _process_kwargs(self, kwargs):
         # Set our kwargs on self, then delete them, and the rest are forwarded to super()
+        # But also special handling for `args`, per the above comment
+        # This definitely isn't my favorite code I've ever written... quite inelegant (but it gets the job done I suppose)
+        args = kwargs.get('args', ())
         for key, defaultval in self._known_client_kwargs.items():
             if key in kwargs:
                 setattr(self, key, kwargs[key])
                 del kwargs[key]
+            elif key in args:
+                setattr(self, key, getattr(args, key, defaultval))
             else:
                 setattr(self, key, defaultval)
+        if 'args' in kwargs:
+            del kwargs['args']
 
     # TODO: http2?
     def __init__(self, **kwargs):
         '''
-        This `httpx.AsyncClient` subclass may be initialized with any kwargs of the parent.
-        Also, `self.concurrency` and `self.user` can be set here.
+        This `httpx.AsyncClient` subclass may be initialized with any kwargs of the parent class.
+
+        This class itself recognizes the `concurrency`, `user`, and `args` kwargs.
+        - Any unrecognized kwargs are forwared to the parent class.
+        - The "args" kw is a special convenience: it may contain a namespace from which the other recognized kwargs will
+              be read. Unrecognized kwargs in "args" are *not* forwarded to the parent class.
+
+        The default concurrency is lower than the maximum possible, to help prevent slamming CDB by default. Wise users
+        may increase the concurrency beyond the default.
         '''
         # take our kwargs, and delete them from the dict
         self._process_kwargs(kwargs)
@@ -185,7 +203,7 @@ class AsyncCDBClient(httpx.AsyncClient):
                     raise err
                 else:
                     # possible extra newline to break \r stuff
-                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}:\n{err}\nretrying, have"
+                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}: {err!r} retrying, have"
                           f" {i} retries left, waiting 20s...")
                     await trio.sleep(20)
             else: # success, no more retrying

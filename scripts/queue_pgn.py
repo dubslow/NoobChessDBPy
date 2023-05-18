@@ -61,7 +61,7 @@ def parse_pgns(args):
     return all_positions
 
 async def mass_queue_set(args, all_positions):
-    async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
+    async with AsyncCDBLibrary(args=args) as lib:
         await lib.mass_queue_set(all_positions)
 
 def main(args):
@@ -70,7 +70,7 @@ def main(args):
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('filenames', nargs='+', help="""A list of filenames to read PGN from. """)
+parser.add_argument('filenames', nargs='+', help="A list of filenames to read PGN from")
 CDBArgs.LimitCount.add_to_parser(parser, help='the maximum number of games to process from each file')
 parser.add_argument('-s', '--start', type=int, default=0,
                     help='the number of games to skip from the beginning of each file')
