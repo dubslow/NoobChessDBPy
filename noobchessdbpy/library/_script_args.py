@@ -62,11 +62,11 @@ class CDBArgs(Enum):
         parser.add_argument(*args, **kwargs)
 
     @staticmethod
-    def add_args_to_parser(parser, members:Sequence): # Sequence[CDBArgs]
+    def add_args_to_parser(parser, args:Sequence): # Sequence[CDBArgs]
         '''
         Given a sequence of members of this class, add each of them to the `parser`. (This is just a simple loop.)
         '''
-        for arg in members:
+        for arg in args:
             arg.add_to_parser(parser)
 
     @staticmethod

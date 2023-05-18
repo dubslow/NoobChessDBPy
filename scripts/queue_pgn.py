@@ -60,13 +60,13 @@ def parse_pgns(args):
                   f"total, {u/n if n else math.nan:.2%} unique rate")
     return all_positions
 
-async def mass_queue_set(all_positions):
+async def mass_queue_set(all_positions, args):
     async with AsyncCDBLibrary(concurrency=args.concurrency, user=args.user) as lib:
         await lib.mass_queue_set(all_positions)
 
 def main(args):
     all_positions = parse_pgns(args)
-    trio.run(mass_queue_set, all_positions)
+    trio.run(mass_queue_set, all_positions, args)
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
