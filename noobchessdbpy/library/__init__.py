@@ -117,6 +117,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         search for `filter_count` positions which pass the filter, using mass queries of size `batchsize`. Returns a list
         of such positions found. `batchsize` should be a multiple of `self.concurrency` for efficient use (default 16x).
         '''
+        # TODO: this is a synchronous function lol
         if not batchsize:
             batchsize = 16 * self.concurrency
         bfs = BreadthFirstState(pos)

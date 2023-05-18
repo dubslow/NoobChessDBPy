@@ -91,9 +91,11 @@ def main(args):
         args.target = math.inf
 
     filtered_poss = trio.run(query_bfs_filter_simple, args)
-    print(f"writing to {args.output}...")
-    with open(args.output, 'w') as handle:
-        handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
+
+    if args.output:
+        print(f"writing to {args.output}...")
+        with open(args.output, 'w') as handle:
+            handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
     print("complete")
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
