@@ -24,7 +24,7 @@ batch, etc, until the given limits are reached. (One or more limit arguments are
 As a baseline, this script includes a default, example filter called `well_biased_filter`. `well_biased_filter` accepts
 knife-edge positions with at least two viable moves.
 
-Of course the user may write any other filter they desire. Many more advanced filters are possible based on CDB's
+Users are encouraged to write any other filter they desire. Many more advanced filters are possible based on CDB's
 query-response data.
 
 Be warned that the output isn't immediately suitable for book building: no checks are done for transpostions or multiple
@@ -45,8 +45,7 @@ import math
 import trio
 import chess
 
-from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState
+from noobchessdbpy.library import AsyncCDBLibrary, BreadthFirstState, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -76,36 +75,12 @@ def well_biased_filter_formatter(board:chess.Board, cdb_json):
 
 async def query_bfs_filter_simple(args):
     '''Using any filter, query breadth-first for positions which pass the filter.'''
-    rootpos = args.fen
-    async with AsyncCDBLibrary(concurrency=args.concurrency) as lib:
-        filtered_poss = await lib.query_bfs_filter_simple(rootpos, well_biased_filter, args.target, args.ply, args.count, args.batchsize)
-    print(f"writing to {args.output}...")
-    with open(args.output, 'w') as handle:
-        handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
-    print("complete")
+    async with AsyncCDBLibrary(args=args) as lib:
+        filtered_poss = await lib.query_bfs_filter_simple(args.fen, well_biased_filter, args.target,
+                                                          args.ply, args.count, args.batchsize)
+    return filtered_poss
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-
-    limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
-    limits.add_argument('-l', '--count', '--limit-count', type=int,
-                        help='the maximum number of positions to query (rounded to batchsize)')
-    limits.add_argument('-p', '--ply', '--limit-ply', type=int, help='the max ply from the root to query')
-    limits.add_argument('-t', '--target', type=int, help='stop after the target number of positions passing the filter')
-
-    parser.add_argument('-b', '--batchsize', type=int,
-                        help='this many queries between each filtering (default: a multiple of concurrency)')
-    parser.add_argument('-f', '--fen', type=lambda fen: chess.Board(fen.replace('_', ' ')), default=chess.Board(),
-          help="the FEN of the root position from which to start breadth-first searching (default: classical startpos)")
-    parser.add_argument('-c', '--concurrency', type=int, default=AsyncCDBClient.DefaultConcurrency,
-                                                      help="maximum number of parallel requests (default: %(default)s)")
-    from sys import argv
-    parser.add_argument('-o', '--output', default=argv[0].replace('.py', '.txt'),
-                        help="filename to write query results to (defaults to scriptname.txt)")
-
-    args = parser.parse_args()
-
+def main(args):
     if not args.count and not args.ply and not args.target:
         parser.error("at least one of the limits is required (see --help)")
     if args.count is None:
@@ -115,4 +90,31 @@ if __name__ == '__main__':
     if args.target is None:
         args.target = math.inf
 
-    trio.run(query_bfs_filter_simple, args)
+    filtered_poss = trio.run(query_bfs_filter_simple, args)
+    print(f"writing to {args.output}...")
+    with open(args.output, 'w') as handle:
+        handle.write('\n'.join(well_biased_filter_formatter(board, json) for board, json in filtered_poss) + '\n')
+    print("complete")
+
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+limits = parser.add_argument_group('limits', 'breadth-first limits, at least one of these is required:')
+CDBArgs.LimitCount.add_to_parser(limits, default=None,
+                                         help='the maximum number of positions to query (rounded to batchsize)')
+CDBArgs.PlyMax.add_to_parser(limits, default=None, help='the max ply from the root to query')
+limits.add_argument('-t', '--target', type=int, help='stop after the target number of positions passing the filter')
+
+
+parser.add_argument('-b', '--batchsize', type=int,
+                    help='this many queries between each filtering (default: a multiple of concurrency)')
+CDBArgs.Fen.add_to_parser(parser,
+              help="the FEN of the root position whence to start breadth-first searching (default: classical startpos)")
+CDBArgs.OutputFilename.add_to_parser(parser)
+
+
+CDBArgs.add_api_args_to_parser(parser)
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    main(args)
