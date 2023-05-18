@@ -153,15 +153,15 @@ class AsyncCDBClient(httpx.AsyncClient):
         # take our kwargs, and delete them from the dict
         self._process_kwargs(kwargs)
         # kwargs is now only those meant for super(), and we set some defaults too before forwarding
-        self_kwargs = {#'base_url': _CDBURL,
-                       'headers':   {'user-agent': self.user + bool(self.user) * '/' + 'noobchessdbpy'},
-                       'timeout':   30,
-                       'limits':    httpx.Limits(max_keepalive_connections=None,
+        super_kwargs = {#'base_url': _CDBURL,
+                        'headers':  {'user-agent': self.user + bool(self.user) * '/' + 'noobchessdbpy'},
+                        'timeout':  30,
+                        'limits':   httpx.Limits(max_keepalive_connections=None,
                                                  max_connections=None,
                                                  keepalive_expiry=30),
-                       #'http2':    True,
+                        #'http2':    True,
                       }
-        super().__init__(**self_kwargs, **kwargs)
+        super().__init__(**super_kwargs, **kwargs)
 
     ####################################################################################################################
 
