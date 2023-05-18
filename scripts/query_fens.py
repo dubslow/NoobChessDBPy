@@ -29,7 +29,7 @@ import chess
 import trio
 
 from noobchessdbpy.api import AsyncCDBClient
-from noobchessdbpy.library import AsyncCDBLibrary
+from noobchessdbpy.library import CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -45,15 +45,15 @@ async def process_fen(client, board):
           f"""{", ".join(f"{move['san']}={move['score']}" for move in json['moves'])}\n""")
 
 async def query_fens(args):
-    async with AsyncCDBClient() as client, trio.open_nursery() as nursery:
+    async with AsyncCDBClient(args=args) as client, trio.open_nursery() as nursery:
         for board in args.fens:
             #print(f'spawning for {arg}')
             nursery.start_soon(process_fen, client, board)
 
+parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument('fens', nargs='+', type=CDBArgs.Fen.value[1]['type'], help="a list of FENs to query")
+CDBArgs.add_api_flat_args_to_parser(parser)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('fens', nargs='+', type=lambda fen: chess.Board(fen.replace('_', ' ')),
-               help="a list of FENs to query")
     args = parser.parse_args()
     trio.run(query_fens, args)
