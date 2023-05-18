@@ -23,6 +23,7 @@ An implementation detail: coalesce common arguments amongst all the scripts here
 
 import argparse
 from enum import Enum
+import math
 from sys import argv
 from typing import Sequence
 
@@ -39,12 +40,12 @@ class CDBArgs(Enum):
     A list of common arguments amongst the many scripts (can be used to automatically include them)
     '''
     Concurrency    = ('-c', '--concurrency'), {'type': int, 'default': AsyncCDBClient.DefaultConcurrency,
-                     'help': "maximum number of parallel requests (default: %(default)s, which is lower than possible)"}
+                     'help': "maximum number of simultaneous requests (default: %(default)s, which is lower than optimal)"}
     User           = ('-u', '--user'), {'default': '',
                      'help': 'add this username to the HTTP User-Agent header (recommended)'}
     Fen            = ('-f', '--fen'), {'type': lambda fen: chess.Board(fen.replace('_', ' ')), 'default': chess.Board(),
                      'help': "the FEN of the root position (default: classical startpos)"}
-    LimitCount     = ('-l', '--count', '--limit-count'), {'type': int,
+    LimitCount     = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
                      'help': 'the maximum number of things to do'} # recommend overwriting this lol
     PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'help': 'the max ply from the root to query'}
     OutputFilename = ('-o', '--output'), {'default': (d := argv[0].replace('.py', '.txt')),
