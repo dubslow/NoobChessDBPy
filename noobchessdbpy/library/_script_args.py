@@ -48,8 +48,8 @@ class CDBArgs(Enum):
     LimitCount     = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
                      'help': 'the maximum number of things to do'} # recommend overwriting this lol
     PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'help': 'the max ply from the root to query'}
-    OutputFilename = ('-o', '--output'), {'default': (d := argv[0].replace('.py', '.txt')),
-                     'help': f"filename to write query results to (default: {d})"}
+    OutputFilename = ('-o', '--output'), {'default': argv[0].replace('.py', '.txt'),
+                     'help': "filename to write query results to (default: %(default)s)"}
     #AutoClear      = ('-a', '--autoclear'), {'action': 'store_true'} TODO: implement this in API
                      # no help message, "hidden" argument for "advanced" users
 
