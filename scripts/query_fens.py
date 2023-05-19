@@ -24,6 +24,7 @@ python query_fens.py "rnbq1bnr/pppkpppp/3p4/8/1P6/3P1P2/P1P1P1PP/RNBQKBNR b KQ -
 
 import argparse
 import logging
+from sys import stdout
 
 import chess
 import trio
@@ -37,11 +38,12 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+fancy_board = lambda board: board.unicode() if stdout.encoding.startswith('utf') else str(board)
 
 async def process_fen(client, board):
     json = await client.query_all(board)
     # call_my_fancy_processing(board, json)
-    print(f"for board:\n{board.unicode()}\ngot moves:\n"
+    print(f"for board:\n{fancy_board(board)}\ngot moves:\n"
           f"""{", ".join(f"{move['san']}={move['score']}" for move in json['moves'])}\n""")
 
 async def query_fens(args):
