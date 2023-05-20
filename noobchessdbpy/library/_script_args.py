@@ -35,6 +35,9 @@ __all__ = ['CDBArgs']
 
 ########################################################################################################################
 
+_board_with_underscores = lambda fen: chess.Board(fen.replace('_', ' '))
+_board_with_underscores.__name__ = "chess.Board" # for argparse help messages
+
 class CDBArgs(Enum):
     '''
     A list of common arguments amongst the many scripts (can be used to automatically include them)
@@ -43,7 +46,7 @@ class CDBArgs(Enum):
                      'help': "maximum number of simultaneous requests (default: %(default)s, which is lower than optimal)"}
     User           = ('-u', '--user'), {'default': '',
                      'help': 'add this username to the HTTP User-Agent header (recommended)'}
-    Fen            = ('-f', '--fen'), {'type': lambda fen: chess.Board(fen.replace('_', ' ')), 'default': chess.Board(),
+    Fen            = ('-f', '--fen'), {'type': _board_with_underscores, 'default': chess.Board(),
                      'help': "the FEN of the root position (default: classical startpos)"}
     LimitCount     = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
                      'help': 'the maximum number of positions to request'}
