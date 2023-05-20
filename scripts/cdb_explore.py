@@ -70,11 +70,11 @@ async def iterate_near_pv(args):
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 CDBArgs.Fen.add_to_parser(parser)
 parser.add_argument('-m', '--margin', type=int, default=5, choices=range(0, 200), metavar="cp_margin",
-                    help='''centipawn margin for what's considered "near PV" (choose from [0,200))''')
+               help='''centipawn margin for what's considered "near PV" (choose from [0,200)) (default: %(default)s)''')
 parser.add_argument('-d', '--decay', '--margin-decay', type=float, default=1.0,
                     help='linear rate per ply by which to shrink the margin (default: %(default)s)')
 parser.add_argument('-b', '--branching', '--max-branch', type=int, default=math.inf,
-                    help='maximum branch factor at any given node')
+                    help='maximum branch factor at any given node (default: %(default)s)')
 CDBArgs.OutputFilename.add_to_parser(parser)
 CDBArgs.add_api_args_to_parser(parser)
 

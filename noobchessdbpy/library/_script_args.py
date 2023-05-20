@@ -43,7 +43,7 @@ class CDBArgs(Enum):
     A list of common arguments amongst the many scripts (can be used to automatically include them)
     '''
     Concurrency    = ('-c', '--concurrency'), {'type': int, 'default': AsyncCDBClient.DefaultConcurrency,
-                     'help': "maximum number of simultaneous requests (default: %(default)s, which is lower than optimal)"}
+                     'help': "maximum number of simultaneous requests (default: %(default)s [polite rather than optimal])"}
     User           = ('-u', '--user'), {'default': '',
                      'help': 'add this username to the HTTP User-Agent header (recommended)'}
     Fen            = ('-f', '--fen'), {'type': _board_with_underscores, 'default': chess.Board(),
