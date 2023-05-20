@@ -32,6 +32,7 @@ from typing import Iterable
 import chess
 import chess.pgn
 import trio
+import traceback
 
 from ..api import AsyncCDBClient, CDBStatus, strip_fen
 from . import _chess_extensions
@@ -339,7 +340,11 @@ class AsyncCDBLibrary(AsyncCDBClient):
                           f"{todo=} t/n={todo/qa:.2%}: \t  moves={len(moves)}: " # {board.fen()}
                           f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:2]):<8}    ''', end='')
         except BaseException as err:
-            print(f"\ninterrupted by {err!r}")
+            if not isinstance(err, KeyboardInterrupt):
+                print(traceback.format_exc())
+                raise err
+            else:
+                print("interrupted, exiting")
         finally:
             rs, rp = circular_requesters.stats()
             _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
