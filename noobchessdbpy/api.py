@@ -83,20 +83,6 @@ def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
         kwargs['board'] = board.fen()
     return kwargs
 
-def _parse_status(json, board:chess.Board=None, raisers:set[CDBStatus]=None) -> None:
-    '''Convert `json['status']` to a `CDBStatus` inplace'''
-    if raisers is None:
-        raisers = {CDBStatus.InvalidBoard, CDBStatus.LimitExceeded} # TODO: remove the latter
-    try:
-        status = CDBStatus(json.get('status'))
-    except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
-        raise CDBError(f"problem with request: status {json.get('status')} "
-                       f"(board: {board.fen() if board else None})")         from None
-    json['status'] = status # convert before raising
-    if status in raisers:
-        raise CDBError(f"{status=} (board: {board.fen() if board else None})")
-
-
 # some notes:
 # 'queue', request for analysis, does a refresh of all child nodes, with recursive deep refresh of pv-lines thereof, minimum depth 20(ish) ply max 100 ply
 # whereas 'query' does only a shallow child refresh, a ply or two.
@@ -149,7 +135,10 @@ class AsyncCDBClient(httpx.AsyncClient):
     encourage user politeness (to CDB itself and to other users who also suffer when the backend is overloaded).
     '''
     DefaultConcurrency = 32
-    _known_client_kwargs = {"concurrency": DefaultConcurrency, "user": ""}
+    _known_client_kwargs = {"concurrency": DefaultConcurrency, "user": "", 'autoclear': False}
+    # The `autoclear` kwarg is undocumented, only meant to aid users in the know. It automatically clears the daily
+    # per-IP query limit when triggered.
+    #
     # In addition to regular kwargs, we also accept the special kw "args": its value is a namespace from which we read
     # the other kwargs (but any actual kwargs override the "args" values). In "args", we ignore unknown kwargs, while
     # regular unknown kwargs are forwarded to the parent class.
@@ -180,7 +169,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         - The "args" kw is a special convenience: it may contain a namespace from which the other recognized kwargs will
               be read. Unrecognized kwargs in "args" are *not* forwarded to the parent class.
 
-        The default concurrency is lower than the maximum possible, to help prevent slamming CDB by default. Wise users
+        The default concurrency is "polite" rather than "optimal" to help prevent slamming CDB by default. Wise users
         may increase the concurrency beyond the default.
         '''
         # take our kwargs, and delete them from the dict
@@ -197,6 +186,22 @@ class AsyncCDBClient(httpx.AsyncClient):
         super().__init__(**super_kwargs, **kwargs)
 
     ####################################################################################################################
+
+    def _parse_status(self, json, board:chess.Board=None, raisers:set[CDBStatus]=None) -> None:
+        '''Convert `json['status']` to a `CDBStatus` inplace'''
+        if raisers is None:
+            raisers = {CDBStatus.InvalidBoard, CDBStatus.LimitExceeded}
+        if self.autoclear: # overwrite `raisers` input in this case
+            raisers -= {CDBStatus.LimitExceeded}
+
+        try:
+            status = CDBStatus(json.get('status'))
+        except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
+            raise CDBError(f"problem with request: status {json.get('status')} "
+                           f"(board: {board.fen() if board else None})")         from None
+        json['status'] = status # convert before raising
+        if status in raisers:
+            raise CDBError(f"{status=} (board: {board.fen() if board else None})")
 
     async def _cdb_request(self, board:chess.Board, *, raisers:set[CDBStatus]=None, action, **kwargs) -> dict:
         '''
@@ -221,13 +226,17 @@ class AsyncCDBClient(httpx.AsyncClient):
                     print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}: {err!r} retrying, "
                           f"have {i} retries left, waiting 20s...")
                     await trio.sleep(20)
-            else: # success, no more retrying
-                break
-        # TODO: handle LimitExceeded here
-        #print(resp, resp.json())
-        json = resp.json()
-        _parse_status(json, board, raisers)
-        return json
+            else: # HTTP success
+                json = resp.json()
+                self._parse_status(json, board, raisers)
+                if json['status'] is CDBStatus.LimitExceeded and self.autoclear and action != 'clearlimit':
+                    cs = await self._clear_limit() # recursion, but hopefully guarded here ^^ against infinite recursion
+                    if cs is not CDBStatus.LimitCleared:
+                        raise CDBError(f'clearing limit failed????!?!??!??!?? resp={c}')
+                    #continue
+                else:
+                     #print(resp, resp.json())
+                    return json
 
     ####################################################################################################################
 

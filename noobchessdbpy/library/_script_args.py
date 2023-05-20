@@ -54,8 +54,8 @@ class CDBArgs(Enum):
                      'help': 'the maximum allowed ply relative the root'}
     OutputFilename = ('-o', '--output'), {'default': argv[0].replace('.py', '.txt'),
                      'help': "filename to write request results to (default: %(default)s)"}
-    #AutoClear      = ('-a', '--autoclear'), {'action': 'store_true'} TODO: implement this in API
-                     # no help message, "hidden" argument for "advanced" users
+    AutoClear      = ('-a', '--autoclear'), {'action': 'store_true', 'help': argparse.SUPPRESS}
+                     # "hidden" argument for "advanced" users
 
     def add_to_parser(self, parser, **_kwargs):
         '''
@@ -78,11 +78,11 @@ class CDBArgs(Enum):
         '''
         Add the standard API arguments (`AsyncCDBClient._known_client_kwargs`) to the parser.
         '''
-        CDBArgs.add_args_to_parser(parser, (CDBArgs.Concurrency, CDBArgs.User)) # CDBArgs.AutoClear
+        CDBArgs.add_args_to_parser(parser, (CDBArgs.Concurrency, CDBArgs.User, CDBArgs.AutoClear))
 
     @staticmethod
     def add_api_flat_args_to_parser(parser):
         '''
         Like `add_api_args_to_parser` except excluding Concurrency, for use in scripts which spawn based on inputs.
         '''
-        CDBArgs.add_args_to_parser(parser, (CDBArgs.User, )) # CDBArgs.AutoClear
+        CDBArgs.add_args_to_parser(parser, (CDBArgs.User, CDBArgs.AutoClear))
