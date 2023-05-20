@@ -66,23 +66,6 @@ class CDBError(Exception):
     pass
 
 ########################################################################################################################
-
-# Maybe these helper funcs should be static methods on the Client below?
-_known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
-def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
-    '''
-    Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
-    '''
-    for kw in kwargs:
-        if kw not in _known_cdb_params:
-            raise CDBError(f"unknown api argument: {kw} (should be from {_known_cdb_args})")
-    kwargs['json'] = 1
-    if board:
-        if board.is_game_over():
-            return CDBStatus.GameOver
-        kwargs['board'] = board.fen()
-    return kwargs
-
 # some notes:
 # 'queue', request for analysis, does a refresh of all child nodes, with recursive deep refresh of pv-lines thereof, minimum depth 20(ish) ply max 100 ply
 # whereas 'query' does only a shallow child refresh, a ply or two.
@@ -187,6 +170,22 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
+    _known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
+    @staticmethod
+    def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
+        '''
+        Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
+        '''
+        for kw in kwargs:
+            if kw not in _known_cdb_params:
+                raise CDBError(f"unknown api argument: {kw} (should be from {_known_cdb_args})")
+        kwargs['json'] = 1
+        if board:
+            if board.is_game_over():
+                return CDBStatus.GameOver
+            kwargs['board'] = board.fen()
+        return kwargs
+
     def _parse_status(self, json, board:chess.Board=None, raisers:set[CDBStatus]=None) -> None:
         '''Convert `json['status']` to a `CDBStatus` inplace'''
         if raisers is None:
@@ -207,7 +206,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         Gather args into GET params, shortcirucit GameOver, retry HTTP errors, parse CDBStatus, return json
         '''
-        params = _prepare_params(kwargs, board)
+        params = self._prepare_params(kwargs, board)
         if params is CDBStatus.GameOver:
             return {'status': CDBStatus.GameOver}
         params['action'] = action
