@@ -19,7 +19,7 @@
 This script demonstrates the most basic usage of the API, simply querying each FEN arg.
 
 For example:
-python query_fens.py "rnbq1bnr/pppkpppp/3p4/8/1P6/3P1P2/P1P1P1PP/RNBQKBNR b KQ - 0 3" "8/6k1/R7/1r5P/5PK1/8/8/8 w - - 0 1" "rnbqkb1r/ppp1pp1p/3p1np1/8/3PPP2/2N5/PPP3PP/R1BQKBNR b KQkq - 0 1"
+python query_paste_fen.py "rnbq1bnr/pppkpppp/3p4/8/1P6/3P1P2/P1P1P1PP/RNBQKBNR b KQ - 0 3" "8/6k1/R7/1r5P/5PK1/8/8/8 w - - 0 1" "rnbqkb1r/ppp1pp1p/3p1np1/8/3PPP2/2N5/PPP3PP/R1BQKBNR b KQkq - 0 1"
 
 To query FENs from files, see query_files_fen.py
 '''
