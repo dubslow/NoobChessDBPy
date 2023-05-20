@@ -16,11 +16,12 @@
 #    See the LICENSE file for more details.
 
 '''
-reads a list of `info depth ... pv ucimove ucimove ucimove ...` from a list of files for mass queueing, after deduplicating
+reads a list of `info depth ... pv ucimove ucimove ucimove ...` from a list of files for mass queueing, after
+deduplicating
 
 (doesn't read fen from the `position` command.... TODO)
 
-to paste just one such line into a command, see queue_fen_uci.py; if you have PGN files, see queue_pgn.py
+to paste just one such line into a command, see queue_paste_fen_uci.py; if you have PGN files, see queue_files_pgn.py
 '''
 
 import argparse

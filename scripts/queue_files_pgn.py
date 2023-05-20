@@ -16,29 +16,28 @@
 #    See the LICENSE file for more details.
 
 '''
-This script reads JSON files, one at a time: read FENs from json of {fen: <blah>}, deduplicate the positions,
-rinse and repeat, and cross-deduplicate between all files. Then mass-queue the cross-deduplicated positions into CDB.
+This script reads PGN files, one at a time: read games from one file into memory, find all positions in the games
+(including variations and PVs stored in comments), deduplicate the positions, rinse and repeat, and cross-deduplicate
+between all files. Then mass-queue the cross-deduplicated positions into CDB.
 
-The <blah> is ignored.
+Caution: PGN parsing is painfully slow, and furthermore can consume *lots* of memory. Monitor memory usage.
 
 Note: queue order is arbitrary.
 
 (Note: queueing near-root positions can be quite expensive, so use this with caution. TODO: write a better form that
 does only some queueing, and some querying instead)
 
-One can also queue PGN files, see queue_pgn.py.
+One can also queue lines by pasting PGN directly on the command line, see queue_paste_pgn.py
 '''
 
 import argparse
-import json
 import logging
 import math
 
 import trio
 import chess.pgn
 
-from noobchessdbpy.api import strip_fen
-from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
+from noobchessdbpy.library import AsyncCDBLibrary, parse_pgn_to_set, CDBArgs
 
 logging.basicConfig(
     format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
@@ -47,23 +46,18 @@ logging.basicConfig(
 )
 
 
-def parse_json_fens(args):
+def parse_pgns(args):
     all_positions, n, u_sub = set(), 0, 0
-    print(f"reading from {args.filenames} ...")
     for i, filename in enumerate(args.filenames):
         with open(filename) as filehandle:
-            jfens = json.loads(filehandle.read())
-        x = len(jfens)
-        this_positions = set(strip_fen(fen) for fen in jfens.keys())
-        this_len = len(this_positions)
-        print(f"after deduplicating {filename}, found {this_len} unique positions from {x} total, {this_len/x:.2%} unique rate")
+            this_positions, x = parse_pgn_to_set(filehandle, args.start, args.count)
         n += x
-        u_sub += this_len
+        u_sub += len(this_positions)
         all_positions |= this_positions
         u = len(all_positions)
         if i > 0:
-            print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} total,"
-                  f" {u/n if n else math.nan:.2%} unique rate")
+            print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} "
+                  f"total, {u/n if n else math.nan:.2%} unique rate")
     return all_positions
 
 async def mass_queue_set(args, all_positions):
@@ -71,12 +65,15 @@ async def mass_queue_set(args, all_positions):
         await lib.mass_queue_set(all_positions)
 
 def main(args):
-    all_positions = parse_json_fens(args)
+    all_positions = parse_pgns(args)
     trio.run(mass_queue_set, args, all_positions)
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument('filenames', nargs='+', help='A list of filenames to read JSON FEN from')
+parser.add_argument('filenames', nargs='+', help="A list of filenames to read PGN from")
+CDBArgs.LimitCount.add_to_parser(parser, help='the maximum number of games to process from each file')
+parser.add_argument('-s', '--start', type=int, default=0,
+                    help='the number of games to skip from the beginning of each file')
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

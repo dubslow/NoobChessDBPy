@@ -19,12 +19,12 @@
 parses "fen ucimove ucimove ucimove" directly from cmdline args, no string quoting required
 useful for pasting ad hoc FEN + UCI move inputs, e.g. your local engine output (the `moves` UCI token is optional)
 
-If you've collated some UCI ouptut to file, use queue_uci_output.py.
-If you have PGN, reading it from file with queue_pgn.py or pasting it to queue_lines.py.
+If you've collated some UCI ouptut to file, use queue_files_uci.py.
+If you have PGN, reading it from file with queue_files_pgn.py or pasting it to queue_paste_pgn.py.
 
 example:
 
-python queue_fen_uci.py 6k1/2B3p1/p1b4p/2b5/P1p1p3/2Nn3P/1PR3PK/8 w - - 5 35 a4a5 g7g5 c2e2 d3c1 e2e1 c1d3 e1f1 c5f2 c7d6 g8g7 d6e5 g7g8 e5c7 f2d4 c7b6 d4e5 h2g1 d3f4 g1f2 h6h5 g2g3 f4d3 f2e3 e5g3 f1f6 c6b7 b6d4 g3f4 e3e2
+python queue_paste_fen_uci.py 6k1/2B3p1/p1b4p/2b5/P1p1p3/2Nn3P/1PR3PK/8 w - - 5 35 a4a5 g7g5 c2e2 d3c1 e2e1 c1d3 e1f1 c5f2 c7d6 g8g7 d6e5 g7g8 e5c7 f2d4 c7b6 d4e5 h2g1 d3f4 g1f2 h6h5 g2g3 f4d3 f2e3 e5g3 f1f6 c6b7 b6d4 g3f4 e3e2
 parsed 30 positions from cmdline
 completed 30 queues
 '''

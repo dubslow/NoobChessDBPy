@@ -34,7 +34,7 @@ players' PV pgn and the two kibitzers' PV pgn, for a total of 5 arguments to thi
 parallel (less than a second for hundreds of positions). In other words, live TCEC data can be queued into CDB just as
 fast as you can copy and paste it.
 
-To queue all variations, or else to queue from a PGN file, see queue_pgn.py.
+To queue all variations, or else to queue from a PGN file, see queue_files_pgn.py.
 '''
 
 import argparse

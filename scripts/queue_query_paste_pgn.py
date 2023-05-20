@@ -16,7 +16,7 @@
 #    See the LICENSE file for more details.
 
 '''
-Usage like queue_lines.py (e.g. pasting TCEC PVs) except also queries the lines after queuing them.
+Usage like queue_paste_pgn.py (e.g. pasting TCEC PVs) except also queries the lines after queuing them.
 Almost entirely useless.
 '''
 
