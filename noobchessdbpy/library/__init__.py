@@ -137,47 +137,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         print(f"after {n} queries, found {len(found)} positions passing the predicate")
         return found
 
-    ####################################################################################################################
-
-    # Reimplementing the query_b_f code is... quite the burden, and it would be considerably simpler to loop over that
-    # with the filter, but estimating the looping involved is tricky and perhaps involves overshoot. Whereas this format
-    # enables more accurate estimation (and less overshoot) of queries needed to reach `filtercount` positions.
-    #async def query_bfs_filter_smart(self, bfs:BreadthFirstState, filter, filtercount):
-    #    print(f"{self.concurrency=} {count=}")
-    #    async with trio.open_nursery() as nursery:
-    #        nursery.done = trio.Event()
-    #        # hack: we use this as a counter, without having to separately store a lock and variable
-    #        nursery.count = trio.Sempahore()  # release = increment lol
-    #
-    #        # in general, we use the "tasks close their channel" pattern
-    #        #send_bfs, recv_bfs = trio.open_memory_channel(self.concurrency)
-    #        #nursery.start_soon(self._query_breadth_filter_producer, send_bfs, bfs, maxply, count)
-    #
-    #        results = []
-    #        #send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
-    #        #nursery.start_soon(self._serializer, recv_serialize, results)
-    #
-    #        #async with recv_bfs, send_serialize:
-    #        #    for i in range(self.concurrency):
-    #                #nursery.start_soon(self._query_breadth_filter_consumer, recv_bfs.clone(), send_serialize.clone())
-    #
-    #
-    #    return results
-    #
-    #async def _query_breadth_filter_consumer(self, recv_bfs:trio.MemoryReceiveChannel,
-    #                                              send_serialize:trio.MemorySendChannel):
-    #    async with recv_bfs, send_serialize:
-    #        async for board in recv_bfs:
-    #            await send_serialize.send(await self.query_all(board))
-    #
-    #async def _query_breadth_filter_producer(self, send_bfs:trio.MemorySendChannel, bfs:BreadthFirstState,
-    #                                              maxply=math.inf, count=math.inf):
-    #    async with send_bfs:
-    #        for board in bfs.iter_resume(maxply, count):
-    #            await send_bfs.send(board)
-
-    ####################################################################################################################
-
+    # TODO: implement the "smart" bfs_filter using CircularRequesters (now that it's built)?
 
     ####################################################################################################################
 
