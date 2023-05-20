@@ -365,8 +365,8 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
 
-        If collecting results, they're tuples of `(producer_arg, api_call(producer_arg))`. The caller can easily convert
-        this to a dict if the arg is hashable.
+        If collecting results, they're tuples of `(api_arg, api_call(api_arg))`. The caller can easily convert this to a
+        dict if the arg is hashable.
         '''
         async with trio.open_nursery() as nursery:
             # in general, we use the "tasks close their channel" pattern

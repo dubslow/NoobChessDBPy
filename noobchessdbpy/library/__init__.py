@@ -181,6 +181,31 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     ####################################################################################################################
 
+    async def mass_query_dict(self, fen_dict:dict):
+        '''
+        Given a dict of {stripped fen: None}, query CDB for each pos and update the dict in place to
+        {stripped fen: cdb data}.
+        '''
+        u = len(fen_dict)
+        print(f"now mass querying {u} positions")
+        tuples = await self.mass_request(self.query_all, self._dict_reader, fen_dict, collect_results=True)
+        print(f"\nall {u} queries complete")
+        for board, results in tuples:
+            fen = strip_fen(board.fen())
+            fen_dict[fen] = results
+        return # don't return the arg which was modified in place
+
+    @staticmethod
+    async def _dict_reader(send_taskqueue:trio.MemorySendChannel, fen_dict):
+        # Given a dict of {fen: board}, query the board
+        n = 0
+        async with send_taskqueue:
+            for fen in fen_dict.keys():
+                await send_taskqueue.send(chess.Board(fen))
+                n += 1
+                if n & 0x3F == 0:
+                    print(f"\rtaskqueued {n} requests", end='')
+
     async def mass_queue(self, all_positions:Iterable[chess.Board]):
         '''
         Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
@@ -199,7 +224,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 await send_taskqueue.send(board)
                 n += 1
                 if n & 0x3F == 0:
-                    print(f"taskqueued {n} requests", end='\r')
+                    print(f"\rtaskqueued {n} requests", end='')
 
     async def mass_queue_set(self, all_positions:set[str]):
         '''
@@ -221,7 +246,9 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 await send_taskqueue.send(chess.Board(fenset.pop()))
                 n += 1
                 if n & 0x3F == 0:
-                    print(f"taskqueued {n} requests", end='\r')
+                    print(f"\rtaskqueued {n} requests", end='')
+
+    # TODO: factor out common code from these producers?
 
     ####################################################################################################################
 
