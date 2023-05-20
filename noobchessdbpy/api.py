@@ -68,7 +68,7 @@ class CDBError(Exception):
 ########################################################################################################################
 
 # Maybe these helper funcs should be static methods on the Client below?
-_known_cdb_params = {"action", "showall", "learn", "egtbmetric", "endgame", "move"}
+_known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
 def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
     '''
     Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
@@ -83,16 +83,18 @@ def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
         kwargs['board'] = board.fen()
     return kwargs
 
-def _parse_status(text, board:chess.Board=None, raisers=None) -> CDBStatus:
+def _parse_status(json, board:chess.Board=None, raisers:set[CDBStatus]=None) -> None:
+    '''Convert `json['status']` to a `CDBStatus` inplace'''
     if raisers is None:
-        raisers = set(CDBStatus) - {CDBStatus.Success, CDBStatus.UnknownBoard, CDBStatus.TrivialBoard, CDBStatus.NoBestMove}
+        raisers = {CDBStatus.InvalidBoard, CDBStatus.LimitExceeded} # TODO: remove the latter
     try:
-        status = CDBStatus(text)
+        status = CDBStatus(json.get('status'))
     except ValueError as e: # TODO: can we replace the error that the enum produces in the first place?
-        raise CDBError(f"problem with query (board: {board.fen() if board else None})") from e
+        raise CDBError(f"problem with request: status {json.get('status')} "
+                       f"(board: {board.fen() if board else None})")         from None
+    json['status'] = status # convert before raising
     if status in raisers:
         raise CDBError(f"{status=} (board: {board.fen() if board else None})")
-    return status
 
 
 # some notes:
@@ -116,14 +118,27 @@ class AsyncCDBClient(httpx.AsyncClient):
     '''
     Asynchronous Python interface to the CDB API, using `httpx` and `chess`.
     
-    All queries require a chess.Board arugment, and optionally accept some subset
+    All API calls require a chess.Board arugment, and optionally accept some subset
     of the following standard options: `showall`, `learn`, `egtbmetric`, `endgame`
     all 1 or 0 except egtbmetric, which is "dtm" or "dtz"
         showall = include unknown moves
         learn = enable autoqueueing
         endgame = show only TB data
     
-    `raisers` is an optional set of statuses to raise on, defaulting to anything other than Success.
+    `raisers` is an optional set of statuses to raise on, defaulting to {InvalidBoard, LimitExceeded} (pass an empty set
+    to disable).
+
+    All API call retvals have some sort of `CDBStatus`. For the `query` family, they return a dictionary reflecting CDB's
+    json responses, and the key `"status"` is the only guaranteed field, whose value is the `CDBStatus`. For the `queue`
+    family, the `CDBStatus` is directly returned instead of a json dict.
+
+    By default, if the status is `InvalidBoard`, then a CDBError is raised, tho that behavior can be overridden (or
+    caught with `try` of course). `GameOver` means the request wasn't even sent over the wire (but was rather
+    shortcircuited by `chess.Board.is_game_over`).
+
+    For the `query` family, any value other than `Success` means the rest of the dict is invalid, so checking the status
+    is required before diving into the CDB results.
+
 
     `self.concurrency` may be tweaked as desired for mass requests to CDB, defaulting to DefaultConcurrency.
     `self.user` is the User-Agent attached to http requests, and can only be set via the constructor.
@@ -183,17 +198,17 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     ####################################################################################################################
 
-    async def _base_request(self, board:chess.Board, *, action, **kwargs) -> dict:
+    async def _cdb_request(self, board:chess.Board, *, raisers:set[CDBStatus]=None, action, **kwargs) -> dict:
         '''
-        Gather args into GET params and return json
+        Gather args into GET params, shortcirucit GameOver, retry HTTP errors, parse CDBStatus, return json
         '''
         params = _prepare_params(kwargs, board)
-        if not isinstance(params, dict):
-            return params
+        if params is CDBStatus.GameOver:
+            return {'status': CDBStatus.GameOver}
         params['action'] = action
         #print(params)
 
-        num_retries = 1000
+        num_retries = 1000 # lol
         for i in reversed(range(num_retries)):
             try:
                 resp = await self.get(url=_CDBURL, params=params)
@@ -203,28 +218,18 @@ class AsyncCDBClient(httpx.AsyncClient):
                     raise err
                 else:
                     # possible extra newline to break \r stuff
-                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}: {err!r} retrying, have"
-                          f" {i} retries left, waiting 20s...")
+                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}: {err!r} retrying, "
+                          f"have {i} retries left, waiting 20s...")
                     await trio.sleep(20)
             else: # success, no more retrying
                 break
+        # TODO: handle LimitExceeded here
         #print(resp, resp.json())
-        return resp.json()
+        json = resp.json()
+        _parse_status(json, board, raisers)
+        return json
 
     ####################################################################################################################
-
-    async def _base_query(self, board:chess.Board, *, action, raisers:set=None, **kwargs) -> dict | CDBStatus:
-        '''
-        Private base method for query-type actions. query_all is probably the one you want
-
-        returns a `CDBStatus` if the json status isn't success (or possibly raise a CDBError)
-        '''
-        json = await self._base_request(board, action=action, **kwargs)
-        if not isinstance(json, dict): # CDBStatus.GameOver, no request was sent
-            return json
-        if (cdb_status := _parse_status(json.get('status'), board, raisers)) is not CDBStatus.Success:
-            return cdb_status
-        return json
 
     # In principle, we could or should be using some `functools.partial*` type thing for these, but those don't do any
     # sort of metadata and here we need the metadata, not only the docstring but also stuff like __name__ and
@@ -256,7 +261,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='queryall')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='queryall')
 
     async def query_best(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
@@ -267,7 +272,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='querybest')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='querybest')
 
     async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
@@ -277,7 +282,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='query')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='query')
 
     async def query_search(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
@@ -287,7 +292,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='querysearch')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='querysearch')
 
     async def query_score(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
@@ -298,7 +303,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='queryscore')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='queryscore')
 
     async def query_pv(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
         '''
@@ -310,7 +315,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a `CDBStatus` if the json status isn't success
         '''
-        return await self._base_query(board, raisers=raisers, **kwargs, action='querypv')
+        return await self._cdb_request(board, raisers=raisers, **kwargs, action='querypv')
 
     ####################################################################################################################
 
@@ -320,15 +325,12 @@ class AsyncCDBClient(httpx.AsyncClient):
 
         returns a CDBStatus (or possibly raise a CDBError)
         '''
-        json = await self._base_request(board, action=action, **kwargs)
-        if not isinstance(json, dict): # CDBStatus.GameOver, no request was sent
-            return json
-        return _parse_status(json.get('status'), board, raisers)
+        json = await self._cdb_request(board, action=action, **kwargs)
+        return json['status']
 
     async def queue(self, board:chess.Board, raisers:set=None, **kwargs) -> CDBStatus:
         '''
-        Queue for later analysis a single position. This has recursive effects on the DB, so the cost of this action
-        increases as the `board` gets closer to the root. Use with caution.
+        Queue for later analysis a single position.
         '''
         return await self._base_no_retval(board, raisers=raisers, **kwargs, action='queue')
 

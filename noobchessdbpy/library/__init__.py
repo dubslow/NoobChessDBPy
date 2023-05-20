@@ -131,7 +131,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             results = await self.query_breadth_first(bfs, maxply, count=batchsize)
             n += len(results)
             for board, response in results:
-                if not isinstance(response, CDBStatus) and predicate(board, response):
+                if response['status'] is CDBStatus.Success and predicate(board, response):
                     found.append((board, response))
         print(f"after {n} queries, found {len(found)} positions passing the predicate")
         return found
@@ -307,7 +307,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     vres = await visitor(self, circular_requesters, board, result, margin, relply)
                     if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
                         all_results[strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
-                    if not isinstance(result, dict):
+                    if result['status'] is not CDBStatus.Success:
                         continue
 
                     # having given the visitor its chance, now we iterate
@@ -355,8 +355,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
         Returns results for most nodes, but excluding nodes with no moves or else with a decisive score.
         (This function ignores the last two arguments.)
         '''
-        if isinstance(result, CDBStatus): # leaf node of some sort or another
-            if result not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
+        if (status := result['status']) is not CDBStatus.Success: # leaf node of some sort or another
+            if status not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
                 await circular_requesters.make_request(self.queue, (board,))
             return
         if abs(result['moves'][0]['score']) > 19000:
