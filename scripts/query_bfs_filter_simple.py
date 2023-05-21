@@ -68,7 +68,7 @@ def well_biased_filter(board:chess.Board, cdb_json):
     # don't filter captures by default, but it's a small example of what's possible with cdb data
     #if 'x' in t1['san'] or 'x' in t2['san']: return False
     cp1, cp2 = t1['score'], t2['score']
-    return 90 <= abs(cp1) <= 112 and 90 <= abs(cp2) <= 112
+    return 80<= abs(cp1) <= 100 and 80 <= abs(cp2) <= 100
     # one might also consider cdb's "winrate" thingy, 35 <= winrate <= 65 or smth
 
 def well_biased_filter_formatter(board:chess.Board, cdb_json):
