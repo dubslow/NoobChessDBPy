@@ -49,7 +49,7 @@ def parse_fens(args):
             this_positions, x = read_file(filehandle)
         n += x
         u_sub += len(this_positions)
-        all_positions |= this_positions
+        all_positions.update(this_positions) #all_positions |= this_positions
         u = len(all_positions)
         if i > 0:
             print(f"after cross-deduplication, found {u} cross-unique positions from {u_sub} sub-unique from {n} "

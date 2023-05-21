@@ -71,7 +71,7 @@ class CDBArgs(Enum):
         Add argument `self` to the given parser, optionally overwriting kwargs.
         '''
         args, kwargs = self.value
-        kwargs |= _kwargs
+        kwargs.update(_kwargs) #kwargs |= _kwargs
         parser.add_argument(*args, **kwargs)
 
     @staticmethod
