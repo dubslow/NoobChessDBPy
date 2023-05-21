@@ -25,6 +25,8 @@ Note: fortresses quickly cause search explosions. Changing the margin by a singl
 fortress, or indeed the same margin used multiple times in a row may cause the (near-)PV to shift towards one (or away
 from one).
 
+------------------------------------------------------
+
 Here, "fortress" means "a position where many moves are all nearly equally best", which causes intense branching and
 combinatorial explosion.
 
@@ -46,7 +48,7 @@ import math
 import trio
 import chess.pgn
 
-from noobchessdbpy.api import AsyncCDBClient
+from noobchessdbpy.api import CDBStatus
 from noobchessdbpy.library import AsyncCDBLibrary, CDBArgs
 
 logging.basicConfig(
@@ -55,9 +57,27 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+########################################################################################################################
+
+async def iterate_near_pv_visitor_queue_any(client, circular_requesters, board, result, margin, relply):
+    '''
+    This is a Near PV visitor: pass it to `iterate_near_pv` to `queue` everything in sight -- which is perhaps a bit
+    rough on the backend. Returns results for most nodes, but excluding nodes with no moves or else with a decisive score.
+    (This particular visitor ignores its last two arguments.) See `help(iterate_near_pv)` for details of the visitor
+    interface.
+    '''
+    if (status := result['status']) is not CDBStatus.Success: # leaf node of some sort or another
+        if status not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
+            await circular_requesters.make_request(client.queue, (board,))
+        return
+    if abs(result['moves'][0]['score']) > 19000:
+        return
+    await circular_requesters.make_request(client.queue, (board,))
+    return result
+
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(args=args) as lib:
-        results = await lib.iterate_near_pv(args.fen, lib.iterate_near_pv_visitor_queue_any, args.margin,
+        results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_queue_any, args.margin,
                                             margin_decay=args.decay, maxbranch=args.branching)
     # user can write any post-processing they like here
     if args.output:

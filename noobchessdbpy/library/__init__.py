@@ -286,7 +286,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
         against the current node's nonbest scores.) Iteration terminates upon hitting leaf nodes (e.g.
-        CDBStatus.UnknownBoard, CDBStatus.TrivialBoard), including leaves with "solved" decisive scores (> 19000).
+        CDBStatus.UnknownBoard, CDBStatus.TrivialBoard), which includes nodes with "solved" decisive scores (> 19000).
 
         Such iteration is done by means of recursive `query_all` calls, in a more or less breadth-first order, altho
         with low branching factors the resulting tree can look rather like an MCTS tree with high selective depths.
@@ -307,6 +307,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         `margin` is whatever the local margin at this node is that iterate_near_pv is using.
         `relply` is the relative ply from the root of this `board`.
         (The included visitor `iterate_near_pv_visitor_queue_any` ignores the last two arguments.)
+        See the `near_pv*` family of scripts included next to this package to see some example visitors.
 
         The keyword args customize the margin-iteration behavior for various purposes.
         `margin_decay` is a positive number which linearly shrinks the margin at a rate of `margin_decay` per ply.
@@ -408,22 +409,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
                   f"{qa} nodes, {s} nonleaves, {todo} skipped (branching factor {(qa-1+todo)/_s:.2f}), "
                   f"duplicates {d}, seldepth {maxply}.\nthe visitor returned {len(all_results)} results.")
             return all_results
-
-    @staticmethod # allow users to write their own visitors, whose first arg is the relevant client instance (TODO?)
-    async def iterate_near_pv_visitor_queue_any(self, circular_requesters, board, result, margin, relply):
-        '''
-        Pass this to iterate_near_pv to `queue` everything in sight -- which is perhaps a bit rough on the backend.
-        Returns results for most nodes, but excluding nodes with no moves or else with a decisive score.
-        (This function ignores the last two arguments.)
-        '''
-        if (status := result['status']) is not CDBStatus.Success: # leaf node of some sort or another
-            if status not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
-                await circular_requesters.make_request(self.queue, (board,))
-            return
-        if abs(result['moves'][0]['score']) > 19000:
-            return
-        await circular_requesters.make_request(self.queue, (board,))
-        return result
 
 # end class AsyncCDBLibrary
 ########################################################################################################################
