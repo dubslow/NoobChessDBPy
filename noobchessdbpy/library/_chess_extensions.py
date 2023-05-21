@@ -32,7 +32,7 @@ __all__ = [] # this module only modifies other modules
 # Manually extend chess.Board with a couple utility algorithms
 
 # TODO: apparently chess.Board.fen() is considerably expensive cpu-wise, altho the fenstr takes nearly 9x less memory...
-def legal_child_fens(self, stack=True) -> Iterable[chess.Board]:
+def legal_child_fens(self, stack=True) -> Iterable:
     '''A generator over the `legal_moves` of `self`, yielding resulting fens.
     `stack` is the same as for `self.copy`.'''
     for move in self.legal_moves:
@@ -40,7 +40,7 @@ def legal_child_fens(self, stack=True) -> Iterable[chess.Board]:
         new.push(move)
         yield new.fen()
 
-def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
+def yield_fens_from_sans(self, sans:Iterable) -> Iterable:
     """
     From the given board, parse a list of SAN moves into an iterable of FEN strings.
     """
@@ -81,7 +81,7 @@ def parse_comment_pv_san(self):
     sans = pvstr.split()
     return sans
 
-def add_line_by_san(self, sans: Iterable[str], *, comment: str = "", starting_comment: str = "", nags: Iterable[int] = []) -> chess.pgn.GameNode:
+def add_line_by_san(self, sans: Iterable, *, comment: str = "", starting_comment: str = "", nags: Iterable = []) -> chess.pgn.GameNode:
     """
     Creates a sequence of child nodes for the given list of SANs.
     Adds *comment* and *nags* to the last node of the line and returns it.
@@ -105,7 +105,7 @@ def add_line_by_san(self, sans: Iterable[str], *, comment: str = "", starting_co
 
     return node
 
-def custom_add_line_san(self, sans:Iterable[str]) -> chess.pgn.GameNode:
+def custom_add_line_san(self, sans:Iterable) -> chess.pgn.GameNode:
     """
     Creates a sequence of child nodes for the given list of SANs, using custom board control to avoid ChildNode.board()
     which is grossly expensive
@@ -120,7 +120,7 @@ def custom_add_line_san(self, sans:Iterable[str]) -> chess.pgn.GameNode:
 
     return node
 
-def all_variations(self) -> Iterable[chess.pgn.ChildNode]:
+def all_variations(self) -> Iterable:
     """
     An depth-first iterable yield `ChildNode`s from all variations starting from (and including) this node.
     """

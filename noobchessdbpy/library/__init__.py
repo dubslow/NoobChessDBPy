@@ -156,7 +156,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
     # Next we have various helpers built upon `self.mass_request`, showing how to customize it
     # TODO: factor out common code from all these producers?
 
-    async def mass_query_fens(self, fens:Iterable[str]):
+    async def mass_query_fens(self, fens:Iterable):
         '''
         Very basic: given a container of FENs, query them all and return the CDB results. Can be used for arbitrarily
         large containers, so long as you don't hit the rate limit.
@@ -170,7 +170,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         return results
 
     @staticmethod
-    async def _query_fen_producer(send_taskqueue:trio.MemorySendChannel, fens:Iterable[str]):
+    async def _query_fen_producer(send_taskqueue:trio.MemorySendChannel, fens:Iterable):
         n = 0
         async with send_taskqueue:
             for fen in fens:
@@ -180,7 +180,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     print(f"\rtaskqueued {n} requests", end='')
 
 
-    async def mass_queue(self, all_positions:Iterable[chess.Board]):
+    async def mass_queue(self, all_positions:Iterable):
         '''
         Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
         possible. Better hope you don't get rate limited lol
@@ -203,7 +203,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
     # Not sure if this serves any actual purpose compared to the simpler `mass_queue`.
     # Need to run an actual memory usage comparison
-    async def mass_queue_set(self, all_positions:set[str]):
+    async def mass_queue_set(self, all_positions:set):
         '''
         Pretty much what the interface suggests. Given a set of positions (FEN strings), queue them all into the DB as
         fast as possible. Better hope you don't get rate limited lol
@@ -413,7 +413,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 ########################################################################################################################
 ########################################################################################################################
 
-def parse_pgn_to_set(filehandle, start=0, count=math.inf) -> (set[str], int):
+def parse_pgn_to_set(filehandle, start=0, count=math.inf):
     '''
     Read one PGN file: load any and all positions found in the file into memory, including all PVs in comments.
     Deduplicate, returning a set of FENs. With large files, can cause large memory consumption.

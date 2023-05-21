@@ -45,7 +45,7 @@ logging.basicConfig(
 )
 
 
-def parse_fen_uci(args) -> list[chess.Board]:
+def parse_fen_uci(args) -> list:
     '''
     parses "fen ['moves'] ucimove ucimove ucimove" directly from cmdline args (token 'moves' is optional)
     returns list of boards to queue
