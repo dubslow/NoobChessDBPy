@@ -58,7 +58,10 @@ def parse_fens(args):
 
 async def mass_query_dict(args, fen_dict):
     async with AsyncCDBLibrary(args=args) as lib:
-        await lib.mass_query_dict(fen_dict) # in place
+        tuples = await lib.mass_query_fens(fen_dict.keys())
+    for board, results in tuples:
+        fen = strip_fen(board.fen())
+        fen_dict[fen] = results
 
 def results_formatter(fen, results):
     if results is not None and results['status'] is CDBStatus.Success:

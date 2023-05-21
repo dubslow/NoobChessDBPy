@@ -17,7 +17,7 @@
 
 '''
 The python wrapper to the CDB API. In general, create an AsyncCDBClient instance, and use its methods to make API calls.
-This class inherits from httpx.AsyncClient, and forwards kwargs thereto.
+This class inherits from `httpx.AsyncClient`, and forwards kwargs thereto.
 
 API call return values are generally json (i.e. a python dict) or a CDBStatus value.
 
@@ -25,6 +25,9 @@ Also exposed here are `CDBStatus`, an enum reflecting the status of a single API
 generic `Exception` for when those statuses are bad.
 
 See also the docstrings of these objects.
+
+This module is eventloop agnostic, consisting only of async functions and methods. A consumer may use any eventloop
+they like to use this module.
 '''
 
 __all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
@@ -35,7 +38,6 @@ from enum import Enum, auto
 
 import chess
 import httpx
-import trio # TODO: make this module eventloop-agnostic
 
 ########################################################################################################################
 
@@ -67,12 +69,14 @@ class CDBError(Exception):
 
 ########################################################################################################################
 # some notes:
-# 'queue', request for analysis, does a refresh of all child nodes, with recursive deep refresh of pv-lines thereof, minimum depth 20(ish) ply max 100 ply
+# 'queue', request for analysis, does a refresh of all child nodes, with recursive deep refresh of pv-lines thereof,
+# minimum depth 20(ish) ply max 100 ply
 # whereas 'query' does only a shallow child refresh, a ply or two.
 # (exception: when too little material on the board, ....???)
 # additionally, for classical only, a background process tries its best to ensure all positions are connected to the
 # startpos in some way, every few days or so
-# 'store' effectively creates a new child node, however directly 'queue'ing the child node position will automatically link that child to its parent.
+# 'store' effectively creates a new child node, however directly 'queue'ing the child node position will automatically
+# link that child to its parent.
 
 # query retval is json with keys "moves", "ply", "status", moves is list, each move has "note", "rank", "san", "score", "uci", "winrate"
 # moves: "rank" is similar to the notation in "notes", 2=best, 1=good, 0=worse, but may show 0 for all moves in a bad pos
@@ -168,7 +172,10 @@ class AsyncCDBClient(httpx.AsyncClient):
                       }
         super().__init__(**super_kwargs, **kwargs)
 
+    #
     ####################################################################################################################
+    ####################################################################################################################
+    # First the under-the-hood internals common to each, every, any request made thru this API.
 
     _known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
     @staticmethod
@@ -237,7 +244,12 @@ class AsyncCDBClient(httpx.AsyncClient):
                      #print(resp, resp.json())
                     return json
 
+    #
     ####################################################################################################################
+    ####################################################################################################################
+    # Next, we provide and expose one function for each "action" as described by noob's docs:
+    # https://www.chessdb.cn/cloudbookc_api_en.html
+    # These are split into "query-like" and "queue-like", or more abstractly read ops and write ops.
 
     # In principle, we could or should be using some `functools.partial*` type thing for these, but those don't do any
     # sort of metadata and here we need the metadata, not only the docstring but also stuff like __name__ and
@@ -355,61 +367,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._base_no_retval(**kwargs, action='clearlimit')
 
-    ####################################################################################################################
-
-    async def mass_request(self, api_call, producer_task, *producer_args, collect_results=False):
-        '''
-        Generic mass requester. Takes API call, producer task, producer args, and whether to collect results.
-        The producer task MUST accept, and close when complete, its `send_taskqueue` trio.MemorySendChannel. Other args
-        come after `send_taskqueue`.
-
-        Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
-
-        If collecting results, they're tuples of `(api_arg, api_call(api_arg))`. The caller can easily convert this to a
-        dict if the arg is hashable.
-        '''
-        async with trio.open_nursery() as nursery:
-            # in general, we use the "tasks close their channel" pattern
-            send_taskqueue, recv_taskqueue = trio.open_memory_channel(self.concurrency)
-            nursery.start_soon(producer_task, send_taskqueue, *producer_args)
-
-            if collect_results:
-                results = []
-                send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
-                nursery.start_soon(self._serializer, recv_serialize, results)
-                async with recv_taskqueue, send_serialize:
-                    for i in range(self.concurrency):
-                        nursery.start_soon(self._consumer_results, api_call, recv_taskqueue.clone(), send_serialize.clone())
-            else:
-                async with recv_taskqueue:
-                    for i in range(self.concurrency):
-                        nursery.start_soon(self._consumer, api_call, recv_taskqueue.clone())
-
-        if collect_results:
-            return results
-        return
-
-    @staticmethod
-    async def _consumer(api_call, recv_taskqueue:trio.MemoryReceiveChannel):
-        async with recv_taskqueue:
-            async for thing in recv_taskqueue:
-                await api_call(thing)
-
-    @staticmethod
-    async def _consumer_results(api_call, recv_taskqueue:trio.MemoryReceiveChannel,
-                                          send_serialize:trio.MemorySendChannel):
-        async with recv_taskqueue, send_serialize:
-            async for thing in recv_taskqueue:
-                result = (thing, await api_call(thing))
-                await send_serialize.send(result)
-
-    @staticmethod
-    async def _serializer(recv_serialize, collector):
-        # in theory, we shouldn't need the collector arg, instead making our own and returning it to the nursery...
-        async with recv_serialize:
-            async for val in recv_serialize:
-                collector.append(val)
-
+# end class AsyncCDBClient
 ########################################################################################################################
 
 def strip_fen(fen:str):

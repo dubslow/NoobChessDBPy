@@ -45,15 +45,24 @@ __all__ = ['AsyncCDBLibrary', 'parse_pgn_to_set'] + _s_i_all__ + _s_a_all__
 ########################################################################################################################
 
 class AsyncCDBLibrary(AsyncCDBClient):
-    '''In general, we try to reuse a single client as much as possible, so algorithms are implemented
-    as a subclass of the client.'''
+    '''
+    In general, we try to reuse a single client as much as possible, so algorithms are implemented
+    as a subclass of the client.
+
+    Unlike the API proper, this uses `trio` to provide an eventloop and task-management in most functions. Of course
+    these algorithms can be re-implemented against any eventloop using the API.
+    '''
 
     # Maybe we can later export static variations which construct a new client on each call?
     def __init__(self, **kwargs):
         '''This AsyncCDBClient subclass may be initialized with any kwargs of the parent class'''
         super().__init__(**kwargs)
 
+    #
     ####################################################################################################################
+    ####################################################################################################################
+    # First, basic some examples of "flat" concurrency: spawn one task per input, ez, simple. The catch is that thousands
+    # of inputs would spawn thousands of tasks, so this isn't useful for more than a few hundred requests.
 
     async def queue_single_line(self, pgn:chess.pgn.GameNode):
         '''Given a single line of moves, `queue` for analysis all positions in this line.'''
@@ -75,24 +84,145 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 await trio.sleep(0.001) # this doesn't guarantee order of query, but theoretically helps
         print(f"completed {n} queries")
 
+    #
     ####################################################################################################################
+    ####################################################################################################################
+    # Next we implement some basic structure to use a standard concurrency to process large inputs, with thousands or
+    # millions of requests, but a fixed amount of concurrency, where each task is recycled to process many requests.
+    # This `mass_request` family operates on the basic principle that each request is quite independent of any other,
+    # that the only goal is to do them all as fast as possible.
 
-    async def query_fens(self, fens:Iterable[str]):
+    # The first function here is the basic unit upon which others are built. It demonstrates intro-level usage of the
+    #  core `trio` tools to implement structured concurrency.
+    async def mass_request(self, api_call, producer_task, *producer_args, collect_results=False):
+        '''
+        Generic mass requester. Takes API call, producer task, producer args, and whether to collect results.
+        The producer task MUST accept, and close when complete, its `send_taskqueue` trio.MemorySendChannel. Other args
+        come after `send_taskqueue`.
+
+        Constructs the consumer task to make the API call, and constructs the queue from producer to consumers.
+
+        If collecting results, they're tuples of `(api_arg, api_call(api_arg))`. The caller can easily convert this to a
+        dict if the arg is hashable.
+        '''
+        async with trio.open_nursery() as nursery:
+            # in general, we use the "tasks close their channel" pattern
+            send_taskqueue, recv_taskqueue = trio.open_memory_channel(self.concurrency)
+            nursery.start_soon(producer_task, send_taskqueue, *producer_args)
+
+            if collect_results:
+                results = []
+                send_serialize, recv_serialize = trio.open_memory_channel(self.concurrency)
+                nursery.start_soon(self._serializer, recv_serialize, results)
+                async with recv_taskqueue, send_serialize:
+                    for i in range(self.concurrency):
+                        nursery.start_soon(self._consumer_results, api_call, recv_taskqueue.clone(), send_serialize.clone())
+            else:
+                async with recv_taskqueue:
+                    for i in range(self.concurrency):
+                        nursery.start_soon(self._consumer, api_call, recv_taskqueue.clone())
+
+        if collect_results:
+            return results
+        return
+
+    @staticmethod
+    async def _consumer(api_call, recv_taskqueue:trio.MemoryReceiveChannel):
+        async with recv_taskqueue:
+            async for thing in recv_taskqueue:
+                await api_call(thing)
+
+    @staticmethod
+    async def _consumer_results(api_call, recv_taskqueue:trio.MemoryReceiveChannel,
+                                          send_serialize:trio.MemorySendChannel):
+        async with recv_taskqueue, send_serialize:
+            async for thing in recv_taskqueue:
+                result = (thing, await api_call(thing))
+                await send_serialize.send(result)
+
+    @staticmethod
+    async def _serializer(recv_serialize, collector):
+        # in theory, we shouldn't need the collector arg, instead making our own and returning it to the nursery...
+        async with recv_serialize:
+            async for val in recv_serialize:
+                collector.append(val)
+
+    ####################################################################################################################
+    # Next we have various helpers built upon `self.mass_request`, showing how to customize it
+    # TODO: factor out common code from all these producers?
+
+    async def mass_query_fens(self, fens:Iterable[str]):
         '''
         Very basic: given a container of FENs, query them all and return the CDB results. Can be used for arbitrarily
         large containers, so long as you don't hit the rate limit.
         '''
-        # Note: for containers of size less than the concurrency, this can be quite wasteful. Alas, nurseries not returning
-        # retvals by default makes it tougher...
-        return await self.mass_request(self.query_all, self._query_fen_producer, fens, collect_results=True)
+        # Note: for containers of size less than the concurrency, this can be quite wasteful. Alas, nurseries not
+        # returning retvals by default makes it tougher...
+        u = len(fens)
+        print(f"now mass querying {u} positions")
+        results = await self.mass_request(self.query_all, self._query_fen_producer, fens, collect_results=True)
+        print(f"\nall {u} queries complete")
+        return results
 
     @staticmethod
     async def _query_fen_producer(send_taskqueue:trio.MemorySendChannel, fens:Iterable[str]):
+        n = 0
         async with send_taskqueue:
             for fen in fens:
                 await send_taskqueue.send(chess.Board(fen))
+                n += 1
+                if n & 0x3F == 0:
+                    print(f"\rtaskqueued {n} requests", end='')
+
+
+    async def mass_queue(self, all_positions:Iterable[chess.Board]):
+        '''
+        Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
+        possible. Better hope you don't get rate limited lol
+        '''
+        u = len(all_positions)
+        print(f"now mass queueing {u} positions")
+        await self.mass_request(self.queue, self._iterable_reader, all_positions)
+        print(f"\nall {u} positions have been queued for analysis")
+
+    @staticmethod
+    async def _iterable_reader(send_taskqueue:trio.MemorySendChannel, iterable):
+        n = 0
+        async with send_taskqueue:
+            for board in iterable:
+                await send_taskqueue.send(board)
+                n += 1
+                if n & 0x3F == 0:
+                    print(f"\rtaskqueued {n} requests", end='')
+
+
+    # Not sure if this serves any actual purpose compared to the simpler `mass_queue`.
+    # Need to run an actual memory usage comparison
+    async def mass_queue_set(self, all_positions:set[str]):
+        '''
+        Pretty much what the interface suggests. Given a set of positions (FEN strings), queue them all into the DB as
+        fast as possible. Better hope you don't get rate limited lol
+
+        Note: consumes the given set, upon return the set should be empty
+        '''
+        u = len(all_positions)
+        print(f"now mass queueing {u} positions")
+        await self.mass_request(self.queue, self._set_reader, all_positions)
+        print(f"\nall {u} positions have been queued for analysis")
+
+    @staticmethod
+    async def _set_reader(send_taskqueue:trio.MemorySendChannel, fenset):
+        n = 0
+        async with send_taskqueue:
+            while fenset: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
+                await send_taskqueue.send(chess.Board(fenset.pop()))
+                n += 1
+                if n & 0x3F == 0:
+                    print(f"\rtaskqueued {n} requests", end='')
 
     ####################################################################################################################
+    # Next we have some fancier stuff built atop `self.mass_request`. These next examples use `BreadthFirstState` to
+    # generate what work is to be done.
 
     async def query_breadth_first(self, bfs:BreadthFirstState, maxply=math.inf, count=math.inf):
         '''
@@ -110,7 +240,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
             for board in bfs.iter_resume(maxply, count):
                 await send_taskqueue.send(board)
 
-    ####################################################################################################################
 
     async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, maxply=math.inf, count=math.inf, batchsize=None):
         '''
@@ -138,79 +267,14 @@ class AsyncCDBLibrary(AsyncCDBClient):
         return found
 
     # TODO: implement the "smart" bfs_filter using CircularRequesters (now that it's built)?
-
+    #
     ####################################################################################################################
-
-    async def mass_query_dict(self, fen_dict:dict):
-        '''
-        Given a dict of {stripped fen: None}, query CDB for each pos and update the dict in place to
-        {stripped fen: cdb data}.
-        '''
-        u = len(fen_dict)
-        print(f"now mass querying {u} positions")
-        tuples = await self.mass_request(self.query_all, self._dict_reader, fen_dict, collect_results=True)
-        print(f"\nall {u} queries complete")
-        for board, results in tuples:
-            fen = strip_fen(board.fen())
-            fen_dict[fen] = results
-        return # don't return the arg which was modified in place
-
-    @staticmethod
-    async def _dict_reader(send_taskqueue:trio.MemorySendChannel, fen_dict):
-        # Given a dict of {fen: board}, query the board
-        n = 0
-        async with send_taskqueue:
-            for fen in fen_dict.keys():
-                await send_taskqueue.send(chess.Board(fen))
-                n += 1
-                if n & 0x3F == 0:
-                    print(f"\rtaskqueued {n} requests", end='')
-
-    async def mass_queue(self, all_positions:Iterable[chess.Board]):
-        '''
-        Pretty much what the interface suggests. Given an iterable of positions, queue them all into the DB as fast as
-        possible. Better hope you don't get rate limited lol
-        '''
-        u = len(all_positions)
-        print(f"now mass queueing {u} positions")
-        await self.mass_request(self.queue, self._iterable_reader, all_positions)
-        print(f"\nall {u} positions have been queued for analysis")
-
-    @staticmethod
-    async def _iterable_reader(send_taskqueue:trio.MemorySendChannel, iterable):
-        n = 0
-        async with send_taskqueue:
-            for board in iterable:
-                await send_taskqueue.send(board)
-                n += 1
-                if n & 0x3F == 0:
-                    print(f"\rtaskqueued {n} requests", end='')
-
-    async def mass_queue_set(self, all_positions:set[str]):
-        '''
-        Pretty much what the interface suggests. Given a set of positions (FEN strings), queue them all into the DB as
-        fast as possible. Better hope you don't get rate limited lol
-
-        Note: consumes the given set, upon return the set should be empty
-        '''
-        u = len(all_positions)
-        print(f"now mass queueing {u} positions")
-        await self.mass_request(self.queue, self._set_reader, all_positions)
-        print(f"\nall {u} positions have been queued for analysis")
-
-    @staticmethod
-    async def _set_reader(send_taskqueue:trio.MemorySendChannel, fenset):
-        n = 0
-        async with send_taskqueue:
-            while fenset: # maybe popping will free memory on the fly? otherwise should just use forloop... TODO
-                await send_taskqueue.send(chess.Board(fenset.pop()))
-                n += 1
-                if n & 0x3F == 0:
-                    print(f"\rtaskqueued {n} requests", end='')
-
-    # TODO: factor out common code from these producers?
-
     ####################################################################################################################
+    # This section deals with CircularRequesters and uses thereof. Unlike the `mass_request` family, where each request
+    # is independent, CircularRequesters sets up the `trio` utilities necessary for completed requests to feedback into
+    # and guide future requests. The most obvious use of this is where we traverse CDB "near PVs", where each new node
+    # generates subsequent requests depending on whatever moves CDB returns. Probably many other uses of this sort of
+    # progressive requesting is possible, but nobody's yet conceived of them... the world is your oyster!
 
     async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0, maxbranch=math.inf) -> dict:
         '''
@@ -356,6 +420,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
         await circular_requesters.make_request(self.queue, (board,))
         return result
 
+# end class AsyncCDBLibrary
+########################################################################################################################
 ########################################################################################################################
 
 def parse_pgn_to_set(filehandle, start=0, count=math.inf) -> (set[str], int):
