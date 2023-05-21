@@ -19,9 +19,14 @@
 This module implements some standard CDB interaction algorithms, building atop the API.
 
 Since we want to keep reusing one http client, the algorithms are all implemented as methods on a further subclass of the
-API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms.
+API client: `AsyncCDBLibrary`. Create an instance of this class to use the algorithms. Arguments are generally `chess`
+objects.
 
-Arguments are generally `chess` objects.
+In addition to the main algorithms class, this module also exposes a static `parse_pgn_to_set` function, as well as
+some helper classes `BreadthFirstState` and `CircularRequests`, and also the enum `CDBArgs` for use in scripts which
+call this library.
+
+Checkout the docstrings of all these things to get started -- or read the example scripts!
 '''
 
 ########################################################################################################################
