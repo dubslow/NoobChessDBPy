@@ -16,7 +16,7 @@
 #    See the LICENSE file for more details.
 
 '''
-iterate over CDB near PVs, using a "queue any" visitor to `queue` everything seen.
+iterate over CDB near PVs, using a "save all" visitor to record results of all known positions traversed.
 Users are of course encouraged to customize the visitor or the formatting to file as they please.
 
 Run this command for more details about the walking:
@@ -60,26 +60,20 @@ logging.basicConfig(
 
 ########################################################################################################################
 
-async def iterate_near_pv_visitor_queue_any(client, circular_requesters, board, result, margin, relply):
+async def iterate_near_pv_visitor_save_all(client, circular_requesters, board, result, margin, relply):
     '''
-    This is a Near PV visitor: pass it to `iterate_near_pv` to `queue` everything in sight -- which is perhaps a bit
-    rough on the backend. Returns results for most nodes, but excluding nodes with no moves or else with a decisive score.
-    (This particular visitor ignores its last two arguments.) See `help(iterate_near_pv)` for details of the visitor
+    This is a Near PV visitor: pass it to `iterate_near_pv` to return, and thus save, any known position seen by the
+    iterator.
+    (This particular visitor ignores most of its arguments.) See `help(iterate_near_pv)` for details of the visitor
     interface.
     '''
-    if (status := result['status']) is not CDBStatus.Success: # leaf node of some sort or another
-        if status in (CDBStatus.UnknownBoard, CDBStatus.NoBestMove):
-            await circular_requesters.make_request(client.queue, (board,))
-        return
-    if abs(result['moves'][0]['score']) > 19000:
-        return
-    await circular_requesters.make_request(client.queue, (board,))
-    # Strictly speaking, a queue-only script need not return the query results, but if we have em may as well save em
-    return result
+    if result['status'] is CDBStatus.Success:
+        return result
+    return # no data when not a known position (or bad request in some way)
 
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(args=args) as lib:
-        results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_queue_any, args.margin,
+        results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_save_all, args.margin,
                                             margin_decay=args.decay, maxbranch=args.branching)
     return results
 
