@@ -73,7 +73,7 @@ CDBArgs.LimitCount.add_to_parser(limits, default=None)
 CDBArgs.PlyMax.add_to_parser(limits, default=None)
 limits.add_argument('-i', '--infinite', action='store_true', help='unlimited querying')
 
-CDBArgs.add_args_to_parser(parser, (CDBArgs.Fen, CDBArgs.OutputFilename))
+CDBArgs.add_args_to_parser(parser, CDBArgs.Fen, CDBArgs.OutputFilename)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

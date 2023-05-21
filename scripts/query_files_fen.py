@@ -86,7 +86,7 @@ def main(args):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument('filenames', nargs='+', help="A list of filenames to read FEN from")
-CDBArgs.add_args_to_parser(parser, (CDBArgs.OutputFilename,))
+CDBArgs.OutputFilename.add_to_parser(parser)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

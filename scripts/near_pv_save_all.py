@@ -91,8 +91,8 @@ def main(args):
 
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-CDBArgs.add_args_to_parser(parser, (CDBArgs.Fen, CDBArgs.NearPVMargin, CDBArgs.NearPVDecay, CDBArgs.NearPVBranchMax,
-                                    CDBArgs.OutputFilename))
+CDBArgs.add_args_to_parser(parser, CDBArgs.Fen, CDBArgs.NearPVMargin, CDBArgs.NearPVDecay, CDBArgs.NearPVBranchMax,
+                                   CDBArgs.OutputFilename)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

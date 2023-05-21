@@ -110,7 +110,7 @@ limits.add_argument('-t', '--target', type=int, help='stop after the target numb
 
 parser.add_argument('-b', '--batchsize', type=int,
                     help='this many queries between each filtering (default: a multiple of concurrency)')
-CDBArgs.add_args_to_parser(parser, (CDBArgs.Fen, CDBArgs.OutputFilename))
+CDBArgs.add_args_to_parser(parser, CDBArgs.Fen, CDBArgs.OutputFilename)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

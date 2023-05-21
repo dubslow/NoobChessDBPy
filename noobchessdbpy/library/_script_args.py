@@ -75,7 +75,7 @@ class CDBArgs(Enum):
         parser.add_argument(*args, **kwargs)
 
     @staticmethod
-    def add_args_to_parser(parser, args:Sequence): # Sequence[CDBArgs]
+    def add_args_to_parser(parser, *args):
         '''
         Given a sequence of members of this class, add each of them to the `parser`. (This is just a simple loop.)
         '''
@@ -87,11 +87,11 @@ class CDBArgs(Enum):
         '''
         Add the standard API arguments (`AsyncCDBClient._known_client_kwargs`) to the parser.
         '''
-        CDBArgs.add_args_to_parser(parser, (CDBArgs.Concurrency, CDBArgs.User, CDBArgs.AutoClear))
+        CDBArgs.add_args_to_parser(parser, CDBArgs.Concurrency, CDBArgs.User, CDBArgs.AutoClear)
 
     @staticmethod
     def add_api_flat_args_to_parser(parser):
         '''
         Like `add_api_args_to_parser` except excluding Concurrency, for use in scripts which spawn based on inputs.
         '''
-        CDBArgs.add_args_to_parser(parser, (CDBArgs.User, CDBArgs.AutoClear))
+        CDBArgs.add_args_to_parser(parser, CDBArgs.User, CDBArgs.AutoClear)
