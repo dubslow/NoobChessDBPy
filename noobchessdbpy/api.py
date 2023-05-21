@@ -265,7 +265,7 @@ class AsyncCDBClient(httpx.AsyncClient):
     # all the `partial*` flavors could optimize out the extra stack frame (but maybe that doesn't matter after 3.11)?
     # ...I should probably get my head out of the clouds lol
 
-    async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_all(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Query all known moves for a given position
 
@@ -283,7 +283,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._cdb_request(board, raisers=raisers, **kwargs, action='queryall')
 
-    async def query_best(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_best(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Get a "rank" == 2 move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
         (If there's a tie for best, a ~random one will be chosen.)
@@ -294,7 +294,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._cdb_request(board, raisers=raisers, **kwargs, action='querybest')
 
-    async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Get a "rank" > 0 move for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
 
@@ -304,7 +304,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._cdb_request(board, raisers=raisers, **kwargs, action='query')
 
-    async def query_search(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_search(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Get all "rank" > 0 moves for this position. If in doubt, just use `query_all`. See also the CDB api doc page.
 
@@ -314,7 +314,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._cdb_request(board, raisers=raisers, **kwargs, action='querysearch')
 
-    async def query_score(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_score(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Get just the score for this position (which is the bestmove's score). If in doubt, just use `query_all`.
         See also the CDB api doc page.
@@ -325,7 +325,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         '''
         return await self._cdb_request(board, raisers=raisers, **kwargs, action='queryscore')
 
-    async def query_pv(self, board:chess.Board, raisers:set=None, **kwargs) -> dict | CDBStatus:
+    async def query_pv(self, board:chess.Board, raisers:set=None, **kwargs) -> dict:
         '''
         Get CDB's current principal variation (best guess of perfect play) for this position.
         See also the CDB api doc page.
