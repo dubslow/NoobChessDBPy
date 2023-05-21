@@ -3,7 +3,7 @@
 A python interface to CDB using async+trio.
 
 
-##### Intro
+#### Intro
 
 CDB is this: https://www.chessdb.cn/queryc_en/ altho it goes by so many names that the package name is longer for
 unambiguity. Nevertheless in context it shall simply be called CDB. It is maintained here:
@@ -16,7 +16,7 @@ backend to run some initial analysis for storage as a known position. (On known 
 relevant PVs.)
 
 
-##### Usage
+#### Usage
 
 There are three levels of usage. The simplest is to simply use the scripts included in `scripts/`. They all come with
 `--help` options explaining each script's purpose. Each script is intended to do one thing, so there are many scripts to
@@ -34,7 +34,7 @@ See also `help(noobchessdbpy.api)`.
 No promises of utility, altho I certainly hope it is. Feedback welcome, via this repo or Stockfish Discord.
 
 
-##### Installation
+#### Installation
 
 Can be used in the ~standard python way:
 
@@ -67,11 +67,11 @@ python queue_pgn.py TCEC_Season_24_-_Division_P.pgn
 ```
 
 
-##### Purpose
+#### Purpose
 
 The purpose and priorities of this little project are, in order:
 
-###### 1) To be usable, readable and maintainable.
+##### 1) To be usable, readable and maintainable.
 
 These aren't all *exactly* the same, but they're of course intimately related.
 
@@ -95,7 +95,7 @@ As per that quote, one of the many advantages of structured concurrency is that 
 package without me having done anything special to achieve that, thanks to trio's efforts under the hood.
 
 
-###### 2) To be fast, in terms of requests per second.
+##### 2) To be fast, in terms of requests per second.
 
 I believe `async`/`await` is again the best way to achieve this goal, rather than with threads or other stuff. At present,
 this package is capable of around 400-500 requests/second, depending on your CPU, and there remains lots of room for more

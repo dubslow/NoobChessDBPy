@@ -11,6 +11,8 @@ as essentially query/reading scripts.
 For queuing, there's options for PGN input, uci output as input, or SAN input, be they from files or pasted into the
 command line. I particularly recommend the use of `queue_paste_pgn.py` as a great way to enqueue live TCEC PVs into
 CDB as games are played in real time. `queue_paste_fen_san.py` can also be used for similar purposes, e.g. to enqueue
-Sesse's output concerning a live human game.
+Sesse's output concerning a live human game. Finally, the `near_pv*` scripts can provide some ways of automatically
+queueing, well, positions near the PV of the given root position. This can provide substantial focus from the CDB elves
+onto a given position of interest.
 
 Many more uses of CDB beyond these are possible, if only the user can conceive of them :) happy scripting!
