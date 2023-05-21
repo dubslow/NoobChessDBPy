@@ -67,7 +67,7 @@ async def iterate_near_pv_visitor_queue_any(client, circular_requesters, board, 
     interface.
     '''
     if (status := result['status']) is not CDBStatus.Success: # leaf node of some sort or another
-        if status not in (CDBStatus.TrivialBoard, CDBStatus.GameOver):
+        if status in (CDBStatus.UnknownBoard, CDBStatus.NoBestMove):
             await circular_requesters.make_request(client.queue, (board,))
         return
     if abs(result['moves'][0]['score']) > 19000:
