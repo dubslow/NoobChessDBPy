@@ -73,13 +73,19 @@ async def iterate_near_pv_visitor_queue_any(client, circular_requesters, board, 
     if abs(result['moves'][0]['score']) > 19000:
         return
     await circular_requesters.make_request(client.queue, (board,))
+    # Strictly speaking, a queue-only script need not return the query results, but if we have em may as well save em
     return result
 
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(args=args) as lib:
         results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_queue_any, args.margin,
                                             margin_decay=args.decay, maxbranch=args.branching)
+    return results
+
+
+def main(args):
     # user can write any post-processing they like here
+    results = trio.run(iterate_near_pv, args)
     if args.output:
         print(f"writing to {args.output}...")
         with open(args.output, 'w') as f:
@@ -100,4 +106,4 @@ CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    trio.run(iterate_near_pv, args)
+    main(args)
