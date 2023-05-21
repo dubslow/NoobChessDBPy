@@ -42,20 +42,29 @@ class CDBArgs(Enum):
     '''
     A list of common arguments amongst the many scripts (can be used to automatically include them)
     '''
-    Concurrency    = ('-c', '--concurrency'), {'type': int, 'default': AsyncCDBClient.DefaultConcurrency,
-                     'help': "maximum number of simultaneous requests (default: %(default)s [polite rather than optimal])"}
-    User           = ('-u', '--user'), {'default': '',
-                     'help': 'add this username to the HTTP User-Agent header (recommended)'}
-    Fen            = ('-f', '--fen'), {'type': _board_with_underscores, 'default': chess.Board(),
-                     'help': "the FEN of the root position (default: classical startpos)"}
-    LimitCount     = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
-                     'help': 'the maximum number of positions to request'}
-    PlyMax         = ('-p', '--ply', '--limit-ply'), {'type': int, 'default': math.inf,
-                     'help': 'the maximum allowed ply relative the root'}
-    OutputFilename = ('-o', '--output'), {'default': argv[0].replace('.py', '.txt'),
-                     'help': "filename to write request results to (default: %(default)s)"}
-    AutoClear      = ('-a', '--autoclear'), {'action': 'store_true', 'help': argparse.SUPPRESS}
-                     # "hidden" argument for "advanced" users
+    Concurrency     = ('-c', '--concurrency'), {'type': int, 'default': AsyncCDBClient.DefaultConcurrency,
+                      'help': "maximum number of simultaneous requests (default: %(default)s [polite rather than optimal])"}
+    User            = ('-u', '--user'), {'default': '',
+                      'help': 'add this username to the HTTP User-Agent header (recommended)'}
+    AutoClear       = ('-a', '--autoclear'), {'action': 'store_true', 'help': argparse.SUPPRESS}
+                      # "hidden" argument for "advanced" users
+
+    Fen             = ('-f', '--fen'), {'type': _board_with_underscores, 'default': chess.Board(),
+                      'help': "the FEN of the root position (default: classical startpos)"}
+    LimitCount      = ('-l', '--count', '--limit-count'), {'type': int, 'default': math.inf,
+                      'help': 'the maximum number of positions to request'}
+    PlyMax          = ('-p', '--ply', '--limit-ply'), {'type': int, 'default': math.inf,
+                      'help': 'the maximum allowed ply relative the root'}
+    OutputFilename  = ('-o', '--output'), {'default': argv[0].replace('.py', '.txt'),
+                      'help': "filename to write request results to (default: %(default)s)"}
+
+    NearPVMargin    = ('-m', '--margin'), {'type': int, 'default': 5, 'choices': range(0, 200), 'metavar': "cp_margin",
+                      'help': '''centipawn margin for what's considered "near PV"'''
+                                ' (choose from [0,200)) (default: %(default)s)'}
+    NearPVDecay     = ('-d', '--decay', '--margin-decay'), {'type': float, 'default': 1.0,
+                      'help': 'linear rate per ply by which to shrink the margin (default: %(default)s)'}
+    NearPVBranchMax = ('-b', '--branching', '--max-branch'), {'type': int, 'default': math.inf,
+                      'help': 'maximum branch factor at any given node (default: %(default)s)'}
 
     def add_to_parser(self, parser, **_kwargs):
         '''
