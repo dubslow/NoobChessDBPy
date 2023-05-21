@@ -62,7 +62,7 @@ chess.Board.safe_peek = safe_peek
 ########################################################################################################################
 # Manually add some more methods to chess.pgn.GameNode
 
-def parse_comment_pv_san(self) -> Iterable[str] | None:
+def parse_comment_pv_san(self):
     """
     Parse this node's comment for comma-separated key=value fields for the 'pv' field which is a list of SAN moves.
     In general we expect the PV to originate from this node's parent, and rarely may differ from this node's move.

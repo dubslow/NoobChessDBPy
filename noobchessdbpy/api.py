@@ -179,7 +179,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     _known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
     @staticmethod
-    def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
+    def _prepare_params(kwargs, board:chess.Board=None):
         '''
         Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
         '''
