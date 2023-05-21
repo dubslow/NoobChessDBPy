@@ -303,6 +303,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         The visitor may make (arbitrary) api calls by e.g. `circular_requesters.make_request(client.queue, (board,))`.
         `iterate_near_pv` will ignore any api calls made by the visitor. The visitor should not use query_all (as the
         iterator will do so), but any other api call is fair game.
+        `board` is the current node; amongst other things, this contains the fen and the moves used to reach this node
         `result` is whatever was returned by `client.query_all(board)`.
         `margin` is whatever the local margin at this node is that iterate_near_pv is using.
         `relply` is the relative ply from the root of this `board`.
