@@ -324,8 +324,6 @@ class AsyncCDBLibrary(AsyncCDBClient):
         '''
         if cp_margin > 200: # TODO: is this too low? am i too paranoid?
             raise ValueError(f"{cp_margin=} is too high, and would make a lot of bad requests")
-        if margin_decay < 0:
-            raise ValueError(f"{margin_decay=} must be zero or positive")
         if maxbranch < 0:
             raise ValueError(f"{maxbranch=} must be zero or positive")
 
