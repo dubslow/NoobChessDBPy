@@ -104,7 +104,7 @@ class CircularRequesters:
     (api_call, args[0]), the latter of which is presumed to be the `chess.Board`. (Implemenation detail: currently only
     deduplicates for `query_all` and `queue`)
 
-    Public methods include `make_request`, `read_response`, `check_circular_idle`, and `stats`.
+    Public methods include `make_request`, `read_response`, `check_circular_busy`, and `stats`.
     '''
     # Circluar memory channels. Determing when we're all done is a bit tricky: it's when all requesters are idle
     # *and* there's no further results for the main task to process.
@@ -134,33 +134,41 @@ class CircularRequesters:
         Use of this method is mandatory to ensure proper cleanup, like so:
 
         ```
+        send initial request
         with circular_requesters.as_with():
-            while not await circular_requesters.check_circular_idle():
+            while await circular_requesters.check_circular_busy():
                 ...
-                send requests and read responses
+                process response
+                ...
+                send more requests
                 ...
         ```
 
-        ...to ensure proper cleanup of the relevant internal resources.
+        This ensures proper cleanup of the relevant internal resources.
         '''
         with self.send_request, self.recv_results:
             yield
 
-    async def check_circular_idle(self):
+    async def check_circular_busy(self):
         '''
+        Use this to determine if there's still stuff for the main task to process.
+
         This *should* be usable in a while loop condition without causing any deadlocking, tho I'm not fully certain
         about that. But at least it's worked in practice so far
         '''
-        await checkpoint() # Necessary (sufficient?) for the main task to give way so that the requesters consume any
-        # available work. Otherwise, a requester may have finished a request without having yet return the result and
-        # gone idle. Even with this checkpoint, I think it only works with "fair scheduling" where the checkpointing
-        # task is guaranteed to not resume control until all requesters have gone fully idle. I think...
+        # The basic idea is that we check if requesters are active, or if there're pending results for the main task to
+        # process.
+        await checkpoint() # The catch is that a requester may have received a response without having yet returned the
+        # result to the main task and gone idle. This await is necessary (sufficient?) for the main task to give way so
+        # that the requesters come fully idle after receiving a response. However, even with this checkpoint, I think it
+        # only works with "fair scheduling" where the checkpointing task is guaranteed to not resume control until all
+        # requesters have gone fully idle. I think...
         # I remain scared that it's possible for this check to fail when it should pass, resulting in infinite blocking
         # in self.read_response().
         #print("looping...", (stats := self.recv_request.statistics()).tasks_waiting_receive, stats.open_receive_channels, self.recv_results.statistics().current_buffer_used)
         stats = self.recv_request.statistics()
-        return (    stats.tasks_waiting_receive >= stats.open_receive_channels
-                and self.recv_results.statistics().current_buffer_used <= 0)
+        return (    stats.tasks_waiting_receive < stats.open_receive_channels # Are there any non-idle requesters?
+                or self.recv_results.statistics().current_buffer_used > 0)    # Or else are there pending results?
 
     async def make_request(self, call, args): # little helper closure
         '''returns if request+board is unique (for `query_all` and `queue`) (the board is assumed to be the first arg)'''
@@ -194,7 +202,7 @@ class CircularRequesters:
         #print(1, send_results._state.open_receive_channels)
         with recv_request, send_results:
             #print(2, send_results._state.open_receive_channels)
-            async for api_call, args in recv_request:
+            async for api_call, args in recv_request: # The loop wraps recv_request.receive(); idle tasks "block" there
                 assert api_call.__self__ is self.client # should really, really never fail lol
                 #print(f"{j=} {i=} GETting {api_call.__name__}...")
                 #print(3, send_results._state.open_receive_channels)

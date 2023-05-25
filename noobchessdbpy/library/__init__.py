@@ -334,7 +334,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         baseply = rootboard.ply()
 
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
-        try:
+        try: # Recycle this indentation level...
          async with trio.open_nursery() as nursery:
             circular_requesters = CircularRequesters(self, nursery) # Amongst other duties, deduplicating transpositions
             # is delegated to the requesters.
@@ -344,7 +344,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
             # Now we act as the "producer", processing request results and sending more requests
             with circular_requesters.as_with():
-                while not await circular_requesters.check_circular_idle():
+                while await circular_requesters.check_circular_busy():
                     api_call, args, result = await circular_requesters.read_response()
                     #print("processing result:", api_call.__name__, board.safe_peek(), board.fen())
                     # any calls other than query_all aren't our business, so to speak, and are ignored.
