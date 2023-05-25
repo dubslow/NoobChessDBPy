@@ -86,7 +86,7 @@ async def iterate_near_pv(args):
 def main(args):
     # user can write any post-processing they like here
     results = trio.run(iterate_near_pv, args)
-    results = {fen: ' '.join(move.uci() for move in board.move_stack) for fen, board in results.items()}
+    results = {fen: args.fen.variation_san(board.move_stack) for fen, board in results.items()}
     if args.output:
         print(f"writing to {args.output}...")
         with open(args.output, 'w') as f:
