@@ -62,7 +62,7 @@ logging.basicConfig(
 
 ########################################################################################################################
 
-async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board, result, margin, relply):
+async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board, result, margin, relply, maxply):
     '''
     This is a Near PV visitor: pass it to `iterate_near_pv` to return, and thus save, any known position seen by the
     iterator.
@@ -72,6 +72,7 @@ async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board
     # This visitor is simple: for ~leaf nodes, return only the board (which contains the move stack). Ignore nonleaves.
     # Here "~leaf" means any node with less than 5 moves (excluding those with low mobility).
     if     result['status'] is not CDBStatus.Success \
+        or relply >= maxply \
         or (((num_moves := len(result['moves'])) < 5) and (num_moves < board.legal_moves.count())):
         return board # for this script, we only want the move stack leading here
     return # no data when not a ~leaf
@@ -79,7 +80,7 @@ async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(args=args) as lib:
         results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_save_leaves, args.margin,
-                                            margin_decay=args.decay, maxbranch=args.branching)
+                                            margin_decay=args.decay, maxbranch=args.branching, maxply=args.ply)
     return results
 
 
@@ -98,7 +99,7 @@ def main(args):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 CDBArgs.add_args_to_parser(parser, CDBArgs.Fen, CDBArgs.NearPVMargin, CDBArgs.NearPVDecay, CDBArgs.NearPVBranchMax,
-                                   CDBArgs.OutputFilename)
+                                   CDBArgs.PlyMax, CDBArgs.OutputFilename)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

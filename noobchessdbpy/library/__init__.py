@@ -225,6 +225,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 if n & 0x3F == 0:
                     print(f"\rtaskqueued {n} requests", end='')
 
+    #
+    ####################################################################################################################
     ####################################################################################################################
     # Next we have some fancier stuff built atop `self.mass_request`. These next examples use `BreadthFirstState` to
     # generate what work is to be done.
@@ -246,7 +248,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 await send_taskqueue.send(board)
 
 
-    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, maxply=math.inf, count=math.inf, batchsize=None):
+    async def query_bfs_filter_simple(self, pos:chess.Board, predicate, filter_count, maxply=math.inf, count=math.inf,
+                                                                                      batchsize=None):
         '''
         Given a `predicate`, which is a function on (chess.Board, CDB's json data for that board) returning a bool,
         search for `filter_count` positions which pass the filter, using mass queries of size `batchsize`. Returns a list
@@ -281,7 +284,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
     # generates subsequent requests depending on whatever moves CDB returns. Probably many other uses of this sort of
     # progressive requesting is possible, but nobody's yet conceived of them... the world is your oyster!
 
-    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0, maxbranch=math.inf) -> dict:
+    async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0, maxbranch=math.inf,
+                                                                                  maxply=math.inf) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -299,7 +303,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         `visitor` must be a callable with the following signature:
         async def visitor(client:AsyncCDBClient, circular_requesters:CircularRequesters,
-                          board:chess.Board, result, margin, relply) -> retval | None:
+                          board:chess.Board, result, margin, relply, maxply) -> retval | None:
         The visitor may make (arbitrary) api calls by e.g. `circular_requesters.make_request(client.queue, (board,))`.
         `iterate_near_pv` will ignore any api calls made by the visitor. The visitor should not use query_all (as the
         iterator will do so), but any other api call is fair game.
@@ -307,6 +311,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
         `result` is whatever was returned by `client.query_all(board)`.
         `margin` is whatever the local margin at this node is that iterate_near_pv is using.
         `relply` is the relative ply from the root of this `board`.
+        `maxply` is the maximum ply which the iterator will stop searching at.
         (The included visitor `iterate_near_pv_visitor_queue_any` ignores the last two arguments.)
         See the `near_pv*` family of scripts included next to this package to see some example visitors.
 
@@ -316,11 +321,11 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 relply 20 and higher having cp_margin=0.
             This is useful to aid exploration near root without exploding the search too much when far from the root.
         `maxbranch` is an integer which caps the maximum branching at any given node, regardless of other limits.
+        `maxply` is an interger which caps the maximum relative ply to search from the root.
 
         Typically merely one of decay or maxbranch is needed to control fortresses/explosions, but mileage will vary.
 
         TODO:
-        `maxply`
         `fortress_detection`
         '''
         if cp_margin > 200: # TODO: is this too low? am i too paranoid?
@@ -329,7 +334,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             raise ValueError(f"{maxbranch=} must be zero or positive")
 
         all_results = {} # get that yucky global feeling again
-        s = qa = d = todo = maxply = 0 # todo = queryalls sent but unprocessed, qa = qas processed,
+        s = qa = d = todo = seldepth = 0 # todo = queryalls sent but unprocessed, qa = qas processed,
         # s = nonleaf nodes ("stem") (possibly excluding root), d = duplicate hits
         baseply = rootboard.ply()
 
@@ -356,22 +361,23 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     board = args[0]
                     # we want the ply counters to include leaves, tho we only print on nonleaves (or transposing "leaves")
                     relply = board.ply() - baseply
-                    maxply = max(relply, maxply)
+                    seldepth = max(relply, seldepth)
                     margin = max(round(cp_margin - margin_decay * relply), 0)
                     #print('\n', f"{relply=}, {cp_margin=}, {margin_decay=}, {margin=}")
 
                     # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, circular_requesters, board, result, margin, relply)
+                    vres = await visitor(self, circular_requesters, board, result, margin, relply, maxply)
                     if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
                         all_results[strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
-                    if result['status'] is not CDBStatus.Success:
-                        continue
 
                     # having given the visitor its chance, now we iterate
+                    if result['status'] is not CDBStatus.Success or relply >= maxply:
+                        continue
                     moves = result['moves']
                     score = moves[0]['score']
                     if abs(score) > 19000:
                         return
+
                     score_margin = score - margin
                     # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
                     new_children = 0
@@ -386,6 +392,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
                             new_children += 1
                         else:
                             d += 1
+
                     if new_children:
                         todo += new_children
                         s += 1
@@ -406,7 +413,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
             _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
             print(f"\nfinished.\nsent {rs} requests, processed {rp},\n"
                   f"{qa} nodes, {s} nonleaves, {todo} skipped (branching factor {(qa-1+todo)/_s:.2f}), "
-                  f"duplicates {d}, seldepth {maxply}.\nthe visitor returned {len(all_results)} results.")
+                  f"duplicates {d}, seldepth {seldepth}.\nthe visitor returned {len(all_results)} results.")
             return all_results
 
 # end class AsyncCDBLibrary
