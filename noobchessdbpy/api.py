@@ -26,8 +26,8 @@ generic `Exception` for when those statuses are bad.
 
 See also the docstrings of these objects.
 
-This module is eventloop agnostic, consisting only of async functions and methods. A consumer may use any eventloop
-they like to use this module.
+This module is *nearly* eventloop agnostic, consisting only of async functions and methods plus a brief reference to
+`trio.sleep` for implementing retries. In principle it's nearly trivial to use a different eventloop with this module.
 '''
 
 __all__ = ['CDBStatus', 'CDBError', 'AsyncCDBClient']
@@ -38,6 +38,7 @@ from enum import Enum, auto
 
 import chess
 import httpx
+import trio
 
 ########################################################################################################################
 
