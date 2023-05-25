@@ -179,7 +179,7 @@ class AsyncCDBClient(httpx.AsyncClient):
 
     _known_cdb_params = {"action", "move", "showall", "learn", "egtbmetric", "endgame"}
     @staticmethod
-    def _prepare_params(kwargs, board:chess.Board=None):
+    def _prepare_params(kwargs, board:chess.Board=None) -> dict | CDBStatus:
         '''
         Prepare the parameters to the GET request (or return CDBStatus.GameOver or raise a CDBError)
         '''
@@ -193,7 +193,7 @@ class AsyncCDBClient(httpx.AsyncClient):
             kwargs['board'] = board.fen()
         return kwargs
 
-    def _parse_status(self, json, board:chess.Board=None, raisers:set=None) -> None:
+    def _parse_status(self, json, board:chess.Board=None, raisers:set[CDBStatus]=None) -> None:
         '''Convert `json['status']` to a `CDBStatus` inplace'''
         if raisers is None:
             raisers = {CDBStatus.InvalidBoard, CDBStatus.LimitExceeded}
@@ -209,7 +209,7 @@ class AsyncCDBClient(httpx.AsyncClient):
         if status in raisers:
             raise CDBError(f"{status=} (board: {board.fen() if board else None})")
 
-    async def _cdb_request(self, board:chess.Board, *, raisers:set=None, action, **kwargs) -> dict:
+    async def _cdb_request(self, board:chess.Board, *, raisers:set[CDBStatus]=None, action, **kwargs) -> dict:
         '''
         Gather args into GET params, shortcirucit GameOver, retry HTTP errors, parse CDBStatus, return json
         '''

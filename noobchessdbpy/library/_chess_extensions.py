@@ -32,7 +32,7 @@ __all__ = [] # this module only modifies other modules
 # Manually extend chess.Board with a couple utility algorithms
 
 # TODO: apparently chess.Board.fen() is considerably expensive cpu-wise, altho the fenstr takes nearly 9x less memory...
-def legal_child_fens(self, stack=True) -> Iterable:
+def legal_child_fens(self, stack=True) -> Iterable[chess.Board]:
     '''A generator over the `legal_moves` of `self`, yielding resulting fens.
     `stack` is the same as for `self.copy`.'''
     for move in self.legal_moves:
@@ -40,7 +40,7 @@ def legal_child_fens(self, stack=True) -> Iterable:
         new.push(move)
         yield new.fen()
 
-def yield_fens_from_sans(self, sans:Iterable) -> Iterable:
+def yield_fens_from_sans(self, sans:Iterable[str]) -> Iterable[str]:
     """
     From the given board, parse a list of SAN moves into an iterable of FEN strings.
     """
@@ -62,7 +62,7 @@ chess.Board.safe_peek = safe_peek
 ########################################################################################################################
 # Manually add some more methods to chess.pgn.GameNode
 
-def parse_comment_pv_san(self):
+def parse_comment_pv_san(self) -> Iterable[str] | None:
     """
     Parse this node's comment for comma-separated key=value fields for the 'pv' field which is a list of SAN moves.
     In general we expect the PV to originate from this node's parent, and rarely may differ from this node's move.
@@ -81,7 +81,7 @@ def parse_comment_pv_san(self):
     sans = pvstr.split()
     return sans
 
-def add_line_by_san(self, sans: Iterable, *, comment: str = "", starting_comment: str = "", nags: Iterable = []) -> chess.pgn.GameNode:
+def add_line_by_san(self, sans: Iterable[str], *, comment: str = "", starting_comment: str = "", nags: Iterable[int] = []) -> chess.pgn.GameNode:
     """
     Creates a sequence of child nodes for the given list of SANs.
     Adds *comment* and *nags* to the last node of the line and returns it.
@@ -105,7 +105,7 @@ def add_line_by_san(self, sans: Iterable, *, comment: str = "", starting_comment
 
     return node
 
-def custom_add_line_san(self, sans:Iterable) -> chess.pgn.GameNode:
+def custom_add_line_san(self, sans:Iterable[str]) -> chess.pgn.GameNode:
     """
     Creates a sequence of child nodes for the given list of SANs, using custom board control to avoid ChildNode.board()
     which is grossly expensive
@@ -120,7 +120,7 @@ def custom_add_line_san(self, sans:Iterable) -> chess.pgn.GameNode:
 
     return node
 
-def all_variations(self) -> Iterable:
+def all_variations(self) -> Iterable[chess.pgn.ChildNode]:
     """
     An depth-first iterable yield `ChildNode`s from all variations starting from (and including) this node.
     """

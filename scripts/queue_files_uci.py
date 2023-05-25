@@ -49,7 +49,7 @@ def read_one_file_uci(filename):
                 moves = line.split(' pv ')[1]
                 yield moves.split()
 
-def parse_fen_uci(board:chess.Board, ucimoves:Iterable) -> list:
+def parse_fen_uci(board:chess.Board, ucimoves:Iterable[str]) -> list[chess.Board]:
     '''given a board and a list of ucimove strings, parse into a list of `chess.Board`s'''
     board = board.copy(stack=False)
     yield board
