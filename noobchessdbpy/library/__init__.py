@@ -340,7 +340,7 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         # Not thread safe to refer to variables outside the nursery scope (so to speak)
         try: # Recycle this indentation level...
-         async with trio.open_nursery() as nursery:
+          async with trio.open_nursery() as nursery:
             circular_requesters = CircularRequesters(self, nursery) # Amongst other duties, deduplicating transpositions
             # is delegated to the requesters.
             await circular_requesters.make_request(self.query_all, (rootboard,))
@@ -348,60 +348,61 @@ class AsyncCDBLibrary(AsyncCDBClient):
             print(f"spawned requesters and sent first query_all for {rootboard.fen()}")
 
             # Now we act as the "producer", processing request results and sending more requests
-            with circular_requesters.as_with():
-                while await circular_requesters.check_circular_busy():
-                    api_call, args, result = await circular_requesters.read_response()
-                    #print("processing result:", api_call.__name__, board.safe_peek(), board.fen())
-                    # any calls other than query_all aren't our business, so to speak, and are ignored.
-                    if api_call != self.query_all: # https://stackoverflow.com/a/15977850
-                        continue
+            with circular_requesters.as_with(): # save some indent here
+              while await circular_requesters.check_circular_busy():
+                api_call, args, result = await circular_requesters.read_response()
+                #print("processing result:", api_call.__name__, board.safe_peek(), board.fen())
+                # any calls other than query_all aren't our business, so to speak, and are ignored.
+                if api_call != self.query_all: # https://stackoverflow.com/a/15977850
+                    continue
 
-                    #print("processing queryall result")
-                    qa += 1; todo -= 1;
-                    board = args[0]
-                    # we want the ply counters to include leaves, tho we only print on nonleaves (or transposing "leaves")
-                    relply = board.ply() - baseply
-                    seldepth = max(relply, seldepth)
-                    margin = max(round(cp_margin - margin_decay * relply), 0)
-                    #print('\n', f"{relply=}, {cp_margin=}, {margin_decay=}, {margin=}")
+                #print("processing queryall result")
+                qa += 1; todo -= 1;
+                board = args[0]
+                # we want the ply counters to include leaves, tho we only print on nonleaves (or transposing "leaves")
+                relply = board.ply() - baseply
+                seldepth = max(relply, seldepth)
+                margin = max(round(cp_margin - margin_decay * relply), 0)
+                #print('\n', f"{relply=}, {cp_margin=}, {margin_decay=}, {margin=}")
 
-                    # result may still be json or a CDBStatus, give the visitor a chance to act on that
-                    vres = await visitor(self, circular_requesters, board, result, margin, relply, maxply)
-                    if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
-                        all_results[strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
+                # result may still be json or a CDBStatus, give the visitor a chance to act on that
+                vres = await visitor(self, circular_requesters, board, result, margin, relply, maxply)
+                if vres: # len(all_results) is at least s but also includes "leaves" which have only transposing children
+                    all_results[strip_fen(board.fen())] = vres # board.fen() remains monumentally expensive
 
-                    # having given the visitor its chance, now we iterate
-                    if result['status'] is not CDBStatus.Success or relply >= maxply:
-                        continue
-                    moves = result['moves']
-                    score = moves[0]['score']
-                    if abs(score) > 19000:
-                        return
+                # having given the visitor its chance, now we iterate
+                if result['status'] is not CDBStatus.Success or relply >= maxply:
+                    continue
+                moves = result['moves']
+                score = moves[0]['score']
+                if abs(score) > 19000:
+                    return
 
-                    score_margin = score - margin
-                    # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
-                    new_children = 0
-                    for i, move in enumerate(moves):
-                        if i >= maxbranch or move['score'] < score_margin:
-                            break
-                        child = board.copy(stack=True)
-                        child.push_uci(move['uci'])
-                        #print(f"iterating into {move['san']}")
-                        unique = await circular_requesters.make_request(self.query_all, (child,))
-                        if unique:
-                            new_children += 1
-                        else:
-                            d += 1
-
-                    if not new_children:
-                        continue # no printing for you, transposing node!
-                    todo += new_children
-                    s += 1
-                    _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-                    print(f"\rnodes={qa} stems={s} ply={relply} {margin=} {score=} br={new_children}"
-                          f" brf={(qa-1+todo)/_s:.2f} dups={d} {todo=} t/n={todo/qa:.2%}:"
-                          f" \t  moves={len(moves)}:" # {board.fen()}
-                          f''' {", ".join(f"{move['san']}={move['score']}" for move in moves[:3]):<8}    ''', end='')
+                score_margin = score - margin
+                # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
+                new_children = 0
+                for i, move in enumerate(moves):
+                    if i >= maxbranch or move['score'] < score_margin:
+                        break
+                    child = board.copy(stack=True)
+                    child.push_uci(move['uci'])
+                    #print(f"iterating into {move['san']}")
+                    unique = await circular_requesters.make_request(self.query_all, (child,))
+                    if unique:
+                        new_children += 1
+                    else:
+                        d += 1
+                if not new_children:
+                    continue # no printing for you, transposing node!
+                todo += new_children
+                s += 1
+                _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
+                print(f"\rnodes={qa} stems={s} ply={relply} {margin=} {score=} br={new_children}"
+                      f" brf={(qa-1+todo)/_s:.2f} dups={d} {todo=} t/n={todo/qa:.2%}:"
+                      f" \t  moves={len(moves)}:" # {board.fen()}
+                      f''' {", ".join(f"{move['san']}={move['score']}" for move in moves[:3]):<8}    ''', end='')
+            # end circular requesters
+        # end nursery
         except KeyboardInterrupt:
             print("\ninterrupted, exiting")
         except:
@@ -417,6 +418,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
 # end class AsyncCDBLibrary
 ########################################################################################################################
+########################################################################################################################
+
+
+
 ########################################################################################################################
 
 def parse_pgn_to_set(filehandle, start=0, count=math.inf):
