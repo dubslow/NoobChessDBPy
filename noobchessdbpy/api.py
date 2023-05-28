@@ -230,8 +230,8 @@ class AsyncCDBClient(httpx.AsyncClient):
                     raise err
                 else:
                     # possible extra newline to break \r stuff
-                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error for {board=}: {err!r} retrying, "
-                          f"have {i} retries left, waiting 20s...")
+                    print(('\n' if i == num_retries-1 else '') + f"caught HTTP error on {action} for {board=}:"
+                          f" {err!r} retrying, have {i} retries left, waiting 20s...")
                     await trio.sleep(20)
             else: # HTTP success
                 json = resp.json()
@@ -242,7 +242,7 @@ class AsyncCDBClient(httpx.AsyncClient):
                         raise CDBError(f'clearing limit failed????!?!??!??!?? resp={c}')
                     #continue
                 else:
-                     #print(resp, resp.json())
+                    #print(resp, resp.json())
                     return json
 
     #
