@@ -399,15 +399,16 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     else:
                         continue # no printing for you, transposing node!
                     _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-                    print(f"\rnodes={qa} stems={s} {relply=} {margin=} branching={(qa-1+todo)/_s:.2f} {score=} dups={d} "
-                          f"{todo=} t/n={todo/qa:.2%}: \t  moves={len(moves)}: " # {board.fen()}
-                          f'''{", ".join(f"{move['san']}={move['score']}" for move in moves[:2]):<8}    ''', end='')
+                    print(f"\rnodes={qa} stems={s} {relply=} {margin=} {score=} branch={new_children}"
+                          f" branching={(qa-1+todo)/_s:.2f} dups={d} {todo=} t/n={todo/qa:.2%}:"
+                          f" \t  moves={len(moves)}:" # {board.fen()}
+                          f''' {", ".join(f"{move['san']}={move['score']}" for move in moves[:2]):<8}    ''', end='')
         except KeyboardInterrupt:
             print("\ninterrupted, exiting")
         finally:
             rs, rp = circular_requesters.stats()
             _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
-            print(f"\nfinished.\nsent {rs} requests, processed {rp},\n"
+            print(f"\nfinished. sent {rs} requests, processed {rp}.\n"
                   f"{qa} nodes, {s} nonleaves, {todo} skipped (branching factor {(qa-1+todo)/_s:.2f}), "
                   f"duplicates {d}, seldepth {seldepth}.\nthe visitor returned {len(all_results)} results.")
             return all_results
