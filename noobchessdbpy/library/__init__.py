@@ -393,11 +393,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
                         else:
                             d += 1
 
-                    if new_children:
-                        todo += new_children
-                        s += 1
-                    else:
+                    if not new_children:
                         continue # no printing for you, transposing node!
+                    todo += new_children
+                    s += 1
                     _s = s + (qa <= 1) # for branching factor we divide by nonleaves, but if root is a leaf then that would be 0/0
                     print(f"\rnodes={qa} stems={s} ply={relply} {margin=} {score=} br={new_children}"
                           f" brf={(qa-1+todo)/_s:.2f} dups={d} {todo=} t/n={todo/qa:.2%}:"
