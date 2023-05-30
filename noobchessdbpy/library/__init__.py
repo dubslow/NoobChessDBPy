@@ -430,7 +430,7 @@ def count_fortressness(board, cdb_moves):
     within a margin of the best score. The margin is presently moveindex*(bestscore - movescore).
 
     A position is considered an n-fortress if its first n moves (from 0) are fortressy. In other words, the n+1'th move
-    is the first non-fortressy move. (A position where all L legal moves are fortressy is an L-1-fortress.)
+    is the first non-fortressy move. (A position where all C cdb-scored moves are fortressy is an C-1-fortress.)
 
     Examples: A position whose best move is irreversible is a -1-fortress. A position whose second-best move is
     non-fortressy is a 0-fortress. Thus, positive fortressness implies at least two fortressy moves.
