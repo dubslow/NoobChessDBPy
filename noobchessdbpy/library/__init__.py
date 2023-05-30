@@ -420,7 +420,27 @@ class AsyncCDBLibrary(AsyncCDBClient):
 ########################################################################################################################
 ########################################################################################################################
 
+def count_fortressness(board, cdb_moves):
+    '''
+    Determine if the position "is" a fortress based on CDB's movedata.
 
+    Sort the moves by score (tiebreaks unspecified) and index them from 0.
+
+    Then, a move is considered "fortressy" if it's 1) reversible (shuffling) and 2) the move's (heuristic) score is
+    within a margin of the best score. The margin is presently moveindex*(bestscore - movescore).
+
+    A position is considered an n-fortress if its first n moves (from 0) are fortressy. In other words, the n+1'th move
+    is the first non-fortressy move. (A position where all L legal moves are fortressy is an L-1-fortress.)
+
+    Examples: A position whose best move is irreversible is a -1-fortress. A position whose second-best move is
+    non-fortressy is a 0-fortress. Thus, positive fortressness implies at least two fortressy moves.
+    '''
+    bestscore = cdb_moves[0]['score']
+    # Like the docstring: loop thru the moves to find the first non-fortressy move, returning the prior index.
+    for i, move in enumerate(cdb_moves):
+        if (bestscore - move['score'] > i) or board.is_irreversible(board.parse_san(move['san'])):
+            return i-1
+    return i
 
 ########################################################################################################################
 
