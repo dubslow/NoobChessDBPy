@@ -71,9 +71,9 @@ async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board
     '''
     # This visitor is simple: for ~leaf nodes, return only the board (which contains the move stack). Ignore nonleaves.
     # Here "~leaf" means any node with less than 5 moves (excluding those with low mobility).
-    if     result['status'] is not CDBStatus.Success \
-        or relply >= maxply \
-        or (((num_moves := len(result['moves'])) < 5) and (num_moves < board.legal_moves.count())):
+    if   result['status'] is not CDBStatus.Success \
+      or relply >= maxply \
+      or (((num_moves := len(result['moves'])) < 5) and (num_moves < board.legal_moves.count())):
         return board # for this script, we only want the move stack leading here
     return # no data when not a ~leaf
 
@@ -88,13 +88,15 @@ async def iterate_near_pv(args):
 def main(args):
     # user can write any post-processing they like here
     results = trio.run(iterate_near_pv, args)
-    results = {fen: ' '.join(move.uci() for move in board.move_stack) for fen, board in results.items()}
+    # one line does uci output, one line does san output
+    #results = {fen: ' '.join(move.uci() for move in board.move_stack) for fen, board in results.items()}
+    results = {fen: args.fen.variation_san(board.move_stack) for fen, board in results.items()}
     if args.output:
         print(f"writing to {args.output}...")
         with open(args.output, 'w') as f:
             # a pretty basic formatting, simply printing a dict of {fen: cdb_results}. users may desire to reduce the
             # cdb_results data somewhat for their own purposes.
-            f.write('{\n' + '\n'.join(f'''"{key}": \t{val}''' for key, val in results.items()) + '\n}\n')
+            f.write('{\n' + '\n'.join(f'''"{key}":\t"{val}",''' for key, val in results.items()) + '\n}\n')
         print(f"wrote to {args.output}, all done, now exiting.")
 
 
