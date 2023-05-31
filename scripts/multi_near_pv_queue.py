@@ -82,4 +82,3 @@ CDBArgs.add_api_flat_args_to_parser(parser)
 if __name__ == '__main__':
     args = parser.parse_args()
     main(args)
-

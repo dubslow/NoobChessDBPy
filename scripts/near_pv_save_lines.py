@@ -80,7 +80,8 @@ async def iterate_near_pv_visitor_save_leaves(client, circular_requesters, board
 async def iterate_near_pv(args):
     async with AsyncCDBLibrary(args=args) as lib:
         results = await lib.iterate_near_pv(args.fen, iterate_near_pv_visitor_save_leaves, args.margin,
-                                            margin_decay=args.decay, maxbranch=args.branching, maxply=args.ply)
+                                            margin_decay=args.decay, maxbranch=args.branching, maxply=args.ply,
+                                            count=args.count)
     return results
 
 
@@ -99,7 +100,7 @@ def main(args):
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 CDBArgs.add_args_to_parser(parser, CDBArgs.Fen, CDBArgs.NearPVMargin, CDBArgs.NearPVDecay, CDBArgs.NearPVBranchMax,
-                                   CDBArgs.PlyMax, CDBArgs.OutputFilename)
+                                   CDBArgs.LimitCount, CDBArgs.PlyMax, CDBArgs.OutputFilename)
 CDBArgs.add_api_args_to_parser(parser)
 
 if __name__ == '__main__':

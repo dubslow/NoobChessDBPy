@@ -285,7 +285,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
     # progressive requesting is possible, but nobody's yet conceived of them... the world is your oyster!
 
     async def iterate_near_pv(self, rootboard:chess.Board, visitor, cp_margin, *, margin_decay=1.0, maxbranch=math.inf,
-                                                                                  maxply=math.inf) -> dict:
+                                                                                  maxply=math.inf, count=math.inf
+                             ) -> dict:
         '''
         Iterates "near" the PVs of a given `rootboard`, where "near" is defined as `thisscore >= bestscore - cp_margin`.
         (Note that the rootboard's score is irrelevant, only the current node's bestscore, less the margin, is compared
@@ -294,6 +295,11 @@ class AsyncCDBLibrary(AsyncCDBClient):
 
         Such iteration is done by means of recursive `query_all` calls, in a more or less breadth-first order, altho
         with low branching factors the resulting tree can look rather like an MCTS tree with high selective depths.
+
+        There are a lot of options, many of which may be ignored by first-timers. The most important customization is the
+        visitor...
+
+        ----
 
         Upon seeing a fresh node, before iterating into its near-best children, this calls the `visitor` so that the user
         may take some custom action for themself. For example, the `visitor` may also issue a `queue` on the node (in
@@ -315,13 +321,16 @@ class AsyncCDBLibrary(AsyncCDBClient):
         (The included visitor `iterate_near_pv_visitor_queue_any` ignores the last two arguments.)
         See the `near_pv*` family of scripts included next to this package to see some example visitors.
 
-        The keyword args customize the margin-iteration behavior for various purposes.
+        ----
+
+        The keyword args to this function customize the margin-iteration behavior for various purposes.
         `margin_decay` is a positive number which linearly shrinks the margin at a rate of `margin_decay` per ply.
             For example, `cp_margin` of 20 and `margin_decay` of 1 would result in relply=10 having cp_margin=10 and
                 relply 20 and higher having cp_margin=0.
             This is useful to aid exploration near root without exploding the search too much when far from the root.
         `maxbranch` is an integer which caps the maximum branching at any given node, regardless of other limits.
         `maxply` is an interger which caps the maximum relative ply to search from the root.
+        `count` is simply the maximum number of nodes after which to quite traversing entirely.
 
         Typically merely one of decay or maxbranch is needed to control fortresses/explosions, but mileage will vary.
 
@@ -356,6 +365,10 @@ class AsyncCDBLibrary(AsyncCDBClient):
                 if api_call != self.query_all: # https://stackoverflow.com/a/15977850
                     continue
 
+                if qa >= count:
+                    print("\nbusted max count, exiting")
+                    # TODO: fix broken resource errors caused by this...
+                    break
                 #print("processing queryall result")
                 qa += 1; todo -= 1;
                 board = args[0]
@@ -375,8 +388,8 @@ class AsyncCDBLibrary(AsyncCDBClient):
                     continue
                 moves = result['moves']
                 score = moves[0]['score']
-                if abs(score) > 19000:
-                    return
+                if abs(score) > 19000: # TODO: allow mate-proving by default?
+                    return # TODO: break?
 
                 score_margin = score - margin
                 # One catch: a now-nonleaf may turn out to have entirely transposing children, which makes it a leaf
